@@ -9,6 +9,6 @@ dist-ssr
 .wrangler
 .output
 .vercel
-public/vendor
+/vendor
 scripts/clangd/.build
 scripts/clangd/out

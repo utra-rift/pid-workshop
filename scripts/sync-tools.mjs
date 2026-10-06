@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Copies the in-browser toolchains into public/vendor/, which ships with the app.
+// Copies the in-browser toolchains into vendor/. The dev server serves it at
+// /vendor; scripts/upload-tools.mjs puts it on the CDN for production.
 //
 // The three big binaries (clang's wasm and its header tar, clangd's wasm) are
-// written gzipped: that brings each one under 25 MiB, the per-file limit on
-// Cloudflare Workers, and Vercel serves them as is. The workers inflate them
-// with DecompressionStream. Everything else is copied unchanged.
+// written gzipped, 231 MB down to 50 MB. The workers inflate them with
+// DecompressionStream. Everything else is copied unchanged.
 //
-// Versions here must match src/tools.ts. Runs before `pnpm dev` and `pnpm build`.
+// Versions here must match src/tools.ts. Runs before `pnpm dev` and the upload.
 
 import { createHash } from "node:crypto";
 import {
@@ -31,9 +31,8 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pkgDir = (name) => path.join(root, "node_modules", name);
 const version = (name) => JSON.parse(readFileSync(path.join(pkgDir(name), "package.json"), "utf8")).version;
 
-const vendor = path.join(root, "public/vendor");
+const vendor = path.join(root, "vendor");
 const cache = path.join(root, "node_modules/.cache/learn-pid");
-const MAX_FILE = 25 * 1024 * 1024;
 
 function copy(from, toDir, files) {
 	mkdirSync(toDir, { recursive: true });
@@ -118,13 +117,5 @@ const clangdDir = path.join(vendor, "clangd", CLANGD.version);
 const clangdJs = await download("clangd.js");
 copy(path.dirname(clangdJs), clangdDir, ["clangd.js"]);
 await gzip(await download("clangd.wasm"), path.join(clangdDir, "clangd.wasm"));
-
-// Every file has to fit a static host's per-file limit.
-const tooBig = readdirSync(vendor, { recursive: true })
-	.map((file) => path.join(vendor, String(file)))
-	.filter((file) => statSync(file).isFile() && statSync(file).size > MAX_FILE);
-if (tooBig.length) {
-	throw new Error(`Over 25 MiB, too big for static hosting: ${tooBig.map((f) => path.relative(root, f)).join(", ")}`);
-}
 
 console.log(`Tools ready: pyodide ${pyodide}, basedpyright ${pyright}, clang ${clang}, clangd ${CLANGD.version}`);

@@ -40,7 +40,7 @@ let failed = 0;
 for (const lang of ["python", "cpp"]) {
 	for (const level of LEVELS) {
 		await page.goto(`${base}/level/${level}?instructor=1&lang=${lang}`);
-		await page.getByText(lang === "cpp" ? "clang ready" : "Python ready").waitFor({ timeout: 90_000 });
+		await page.getByText(lang === "cpp" ? "clang ready" : "Python ready").waitFor({ timeout: 240_000 });
 		await page.getByRole("button", { name: "Answer" }).click();
 		await page.getByRole("button", { name: "Use this code" }).click();
 		await page.getByRole("button", { name: "Run" }).click();

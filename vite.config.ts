@@ -1,3 +1,4 @@
+import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -30,6 +31,49 @@ const CLIENT_ONLY: Record<string, string> = {
 		"export function getLanguageServer() { throw new Error('Language servers only run in the browser.'); }",
 	].join("\n"),
 };
+
+const MIME: Record<string, string> = {
+	".js": "text/javascript",
+	".mjs": "text/javascript",
+	".wasm": "application/wasm",
+	".json": "application/json",
+	".zip": "application/zip",
+	".gz": "application/gzip",
+};
+
+/**
+ * In dev, serves the toolchains from vendor/ (see scripts/sync-tools.mjs) at
+ * /vendor. Production loads them from the CDN instead, so they're not part of
+ * the build.
+ */
+function serveVendor(): Plugin {
+	const dir = path.join(root, "vendor");
+	return {
+		name: "serve-vendor",
+		apply: "serve",
+		configureServer(server) {
+			server.middlewares.use("/vendor", (req, res, next) => {
+				const name = decodeURIComponent((req.url ?? "/").split("?")[0]);
+				const file = path.join(dir, name);
+				if (
+					!file.startsWith(dir + path.sep) ||
+					!existsSync(file) ||
+					!statSync(file).isFile()
+				)
+					return next();
+				res.setHeader(
+					"Content-Type",
+					MIME[path.extname(file)] ?? "application/octet-stream",
+				);
+				res.setHeader("Content-Length", statSync(file).size);
+				res.setHeader("Cache-Control", "no-cache");
+				for (const [header, value] of Object.entries(ISOLATION))
+					res.setHeader(header, value);
+				createReadStream(file).pipe(res);
+			});
+		},
+	};
+}
 
 function clientOnly(): Plugin {
 	const PREFIX = "\0client-only:";
@@ -101,6 +145,7 @@ export default defineConfig({
 		},
 	},
 	plugins: [
+		serveVendor(),
 		clientOnly(),
 		nitro({
 			routeRules: {

@@ -76,9 +76,18 @@ async function start(port: MessagePort) {
 	const wasmUrl = URL.createObjectURL(
 		new Blob([wasm as BlobPart], { type: "application/wasm" }),
 	);
-	const { default: Clangd } = (await import(
-		/* @vite-ignore */ TOOLS.clangd.js
-	)) as { default: ClangdFactory };
+	// clangd's threads are workers started from its own script, and a worker
+	// can't start from another origin (the CDN). Load the script from a blob
+	// instead, and point the threads at the same blob.
+	const jsResponse = await fetch(TOOLS.clangd.js);
+	if (!jsResponse.ok)
+		throw new Error(`${TOOLS.clangd.js}: HTTP ${jsResponse.status}`);
+	const jsUrl = URL.createObjectURL(
+		new Blob([await jsResponse.text()], { type: "text/javascript" }),
+	);
+	const { default: Clangd } = (await import(/* @vite-ignore */ jsUrl)) as {
+		default: ClangdFactory;
+	};
 
 	const reader = new BrowserMessageReader(port);
 	const writer = new BrowserMessageWriter(port);
@@ -97,6 +106,7 @@ async function start(port: MessagePort) {
 
 	const clangd = await Clangd({
 		thisProgram: "/usr/bin/clangd",
+		mainScriptUrlOrBlob: jsUrl,
 		locateFile: (path: string, prefix: string) =>
 			path.endsWith(".wasm") ? wasmUrl : `${prefix}${path}`,
 		stdinReady: async () => {

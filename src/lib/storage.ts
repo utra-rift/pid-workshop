@@ -64,6 +64,18 @@ export const storage = {
 	isInstructor: (): boolean => read("instructor", false),
 	setInstructor: (on: boolean) => write("instructor", on ? true : undefined),
 
+	/**
+	 * Toolchains this browser has downloaded, by language. Each value names the
+	 * versions and where they came from, so a new version counts as new.
+	 */
+	getDownloaded: (): Partial<Record<Lang, string>> => read("downloaded", {}),
+	markDownloaded(lang: Lang, key: string) {
+		const downloaded = storage.getDownloaded();
+		if (downloaded[lang] === key) return;
+		downloaded[lang] = key;
+		write("downloaded", downloaded);
+	},
+
 	/** The dev tools button, toggled with the Konami code. */
 	isDev: (): boolean => read("dev", false),
 	setDev: (on: boolean) => write("dev", on ? true : undefined),

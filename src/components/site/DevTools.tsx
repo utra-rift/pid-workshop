@@ -175,6 +175,10 @@ function DevPanel() {
 				>
 					{globalThis.crossOriginIsolated ? "yes" : "no, so clangd can't start"}
 				</dd>
+				<dt className="text-ink-muted">Tools</dt>
+				<dd className="break-all text-ink">
+					{TOOLS.url.replace(/^https?:\/\//, "")}
+				</dd>
 				<dt className="text-ink-muted">Python</dt>
 				<dd className="text-ink">
 					Pyodide {TOOLS.pyodide.version}, basedpyright{" "}

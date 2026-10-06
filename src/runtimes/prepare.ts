@@ -1,3 +1,4 @@
+import { storage } from "#/lib/storage";
 import type { Lang } from "#/sim/types";
 import { TOOLS } from "#/tools";
 import type { RuntimeStatus } from "./client";
@@ -61,15 +62,19 @@ export function prepareLanguage(lang: Lang): Promise<void> {
 			const languageServer = getLanguageServer(lang, await loadMonaco());
 			languageServer.subscribe((status) => update(lang, { server: status }));
 			await languageServer.start();
-		})().catch(() => {});
+			return true;
+		})().catch(() => false);
 
 		// The runtime is required. The language server gets a little longer, then
 		// keeps loading inside the lesson, so a slow or stuck one can't block it.
 		await runtime.ready();
-		await Promise.race([
+		const serverStarted = await Promise.race([
 			server,
-			new Promise((resolve) => setTimeout(resolve, SERVER_GRACE_MS)),
+			new Promise<false>((resolve) =>
+				setTimeout(() => resolve(false), SERVER_GRACE_MS),
+			),
 		]);
+		if (serverStarted) storage.markDownloaded(lang, downloadKey(lang));
 		update(lang, { done: true });
 	})().catch((error) => {
 		e.promise = undefined;
@@ -104,39 +109,21 @@ export function prepareProgress(status: PrepareStatus): number | null {
 	return total > 0 ? Math.min(1, loaded / total) : null;
 }
 
-/** The big files each language downloads. If they're cached, so is the rest. */
-const BIG_FILES: Record<Lang, () => string[]> = {
-	python: () => [
-		`${TOOLS.pyodide.base}/pyodide.asm.wasm`,
-		`${TOOLS.pyodide.base}/python_stdlib.zip`,
-		TOOLS.basedpyright.worker,
-	],
-	cpp: () => [
-		...TOOLS.clang.gzipped.map((file) => `${TOOLS.clang.base}/${file}.gz`),
-		TOOLS.clangd.wasmGz,
-	],
-};
+/** Names a language's tool versions and where they come from. */
+export function downloadKey(lang: Lang): string {
+	return lang === "python"
+		? `${TOOLS.url} pyodide ${TOOLS.pyodide.version} basedpyright ${TOOLS.basedpyright.version}`
+		: `${TOOLS.url} clang ${TOOLS.clang.version} clangd ${TOOLS.clangd.version}`;
+}
 
 /**
- * Whether starting this language would skip the download: it's already
- * running on this page, or the browser has its files cached. Asks the HTTP
- * cache without touching the network.
+ * Whether starting this language would skip the download: it's running on
+ * this page, or this browser downloaded these versions before and should
+ * still have them cached.
  */
-export async function isDownloaded(lang: Lang): Promise<boolean> {
-	if (entry(lang).status.done) return true;
-	const cached = await Promise.all(
-		BIG_FILES[lang]().map(async (url) => {
-			try {
-				const response = await fetch(url, {
-					cache: "only-if-cached",
-					mode: "same-origin",
-				});
-				await response.body?.cancel();
-				return response.ok;
-			} catch {
-				return false;
-			}
-		}),
-	);
-	return cached.every(Boolean);
+export function isDownloaded(
+	lang: Lang,
+	downloaded = storage.getDownloaded(),
+): boolean {
+	return entry(lang).status.done || downloaded[lang] === downloadKey(lang);
 }

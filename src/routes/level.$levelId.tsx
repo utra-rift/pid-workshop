@@ -43,6 +43,7 @@ import { readSharedCode, shareUrl } from "#/lib/share";
 import { storage, useStored } from "#/lib/storage";
 import { cn } from "#/lib/utils";
 import { getRuntime, type RuntimeStatus } from "#/runtimes/client";
+import { downloadKey } from "#/runtimes/prepare";
 import type { Diagnostic, RunResponse } from "#/runtimes/types";
 import { computeMetrics } from "#/sim/metrics";
 import { MECHANISMS } from "#/sim/robot";
@@ -194,6 +195,12 @@ function LevelPage() {
 		void runtime.ready().catch(() => {});
 		return unsubscribe;
 	}, [lang]);
+
+	// Once the runtime and language server are both up, this browser has them.
+	useEffect(() => {
+		if (runtimeStatus.state === "ready" && serverStatus.state === "ready")
+			storage.markDownloaded(lang, downloadKey(lang));
+	}, [runtimeStatus.state, serverStatus.state, lang]);
 
 	// Running and grading.
 	const [response, setResponse] = useState<RunResponse | null>(null);

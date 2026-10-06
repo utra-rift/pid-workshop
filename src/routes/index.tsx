@@ -66,26 +66,8 @@ function Home() {
 		if (saved) void prepareLanguage(saved).catch(() => {});
 	}, []);
 
-	// Which languages would download on Start. Unknown until the cache answers,
-	// so a cached language never flashes its size.
-	const [downloaded, setDownloaded] = useState<Partial<Record<Lang, boolean>>>(
-		{},
-	);
-	useEffect(() => {
-		const mark = (lang: Lang, value: boolean) =>
-			setDownloaded((current) =>
-				current[lang] ? current : { ...current, [lang]: value },
-			);
-		const stops = LANGUAGES.map(({ lang }) => {
-			void isDownloaded(lang).then((value) => mark(lang, value));
-			return watchPrepare(lang, (status) => {
-				if (status.done) mark(lang, true);
-			});
-		});
-		return () => {
-			for (const stop of stops) stop();
-		};
-	}, []);
+	// Languages this browser already has show no download size.
+	const downloads = useStored(storage.getDownloaded, null);
 
 	const start = async (choice: Lang) => {
 		storage.setLang(choice);
@@ -193,7 +175,7 @@ function Home() {
 												className="size-4 transition-transform group-hover:translate-x-1"
 												aria-hidden
 											/>
-											{downloaded[option.lang] === false && (
+											{downloads && !isDownloaded(option.lang, downloads) && (
 												<Badge className="ml-auto text-ink-muted">
 													<Download aria-hidden />
 													{option.download}

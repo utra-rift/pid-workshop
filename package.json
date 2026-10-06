@@ -8,10 +8,11 @@
 	"scripts": {
 		"predev": "node scripts/sync-tools.mjs",
 		"dev": "vite dev --port 3000",
-		"prebuild": "node scripts/sync-tools.mjs",
 		"build": "vite build",
 		"preview": "vite preview",
 		"tools": "node scripts/sync-tools.mjs",
+		"tools:upload": "node scripts/sync-tools.mjs && node scripts/upload-tools.mjs",
+		"tools:check": "node scripts/check-cdn.mjs",
 		"test": "vitest run",
 		"typecheck": "tsc --noEmit",
 		"format": "biome format",

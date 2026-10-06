@@ -84,7 +84,7 @@ let failed = 0;
 for (const c of CASES) {
 	// Load the case's code through a share link, which the app reads from the hash.
 	await page.goto(`${base}/level/${c.level}?instructor=1&lang=${c.lang}#code=${lz.compressToEncodedURIComponent(c.code)}`);
-	await page.getByText(c.lang === "cpp" ? "clang ready" : "Python ready").waitFor({ timeout: 90_000 });
+	await page.getByText(c.lang === "cpp" ? "clang ready" : "Python ready").waitFor({ timeout: 240_000 });
 	await page.waitForTimeout(300);
 	const started = Date.now();
 	await page.getByRole("button", { name: "Run" }).click();

@@ -52,7 +52,7 @@ for (const lang of langs) {
 	log("crossOriginIsolated:", isolated);
 
 	const ready = lang === "cpp" ? "clang ready" : "Python ready";
-	await page.getByText(ready).waitFor({ timeout: 90_000 });
+	await page.getByText(ready).waitFor({ timeout: 240_000 });
 	log(ready);
 
 	await page.getByRole("button", { name: "Answer" }).click();
@@ -68,7 +68,7 @@ for (const lang of langs) {
 
 	const server = lang === "cpp" ? "clangd: checking as you type" : "basedpyright: checking as you type";
 	try {
-		await page.getByText(server).waitFor({ timeout: 90_000 });
+		await page.getByText(server).waitFor({ timeout: 240_000 });
 		log(`language server ready (${server})`);
 	} catch {
 		failed = true;

@@ -15,7 +15,8 @@ Everything runs in the browser. Student code compiles and runs in Web Workers, M
 |---|---|---|
 | 2026-10-06 | Mechanisms | An arm, plus a launcher flywheel (levels 7–9) like PID Playground's. No game pieces: ARC robots fire projectiles, so the arm's extra load is a hopper refill and its disturbances are hits from other robots |
 | 2026-10-06 | Saved progress | Keyed by level number, not id. No migration from the earlier id keys, which nobody used yet |
-| 2026-10-06 | Deploy target | Vercel. All tools ship with the app; the three big binaries are gzipped to fit 25 MiB per file, so no separate bucket is needed |
+| 2026-10-06 | Toolchain hosting | The R2 bucket `cdn`, under `learn-pid/`, served at `cdn2.evanyu.dev` and cached as immutable. The app itself deploys to Vercel without them |
+| 2026-10-06 | Deploy target | Vercel |
 | 2026-10-05 | Workshop timing | Not soon. clangd and the stretch levels are in scope |
 | 2026-10-05 | Students new to code | Keep the level design. Python is suggested to first-timers; level 1's hints show `if`/`else` syntax |
 | 2026-10-05 | Porting PID Playground's code | Not needed. Everything here is written from scratch; the site is credited |
@@ -204,7 +205,8 @@ COOP `same-origin` and COEP `require-corp` are set on every response: by TanStac
 
 ### Hosting
 
-- **Everything ships with the app** in `public/vendor/`: Pyodide (15 MB), the basedpyright worker (18 MB), clang (26 MB) and clangd (24 MB). clang's 75 MB wasm and 30 MB header tar and clangd's 126 MB wasm are stored gzipped, which puts every file under Cloudflare's 25 MiB limit. The compiler worker swaps in a `fetch` that asks for the `.gz` and inflates it as it streams; the clangd worker inflates its wasm after downloading. Both skip inflating if a server already decoded the file. The static output is about 86 MiB.
+- **Toolchains on the CDN** at `https://cdn2.evanyu.dev/learn-pid/`, the R2 bucket `cdn`: Pyodide (15 MB), the basedpyright worker (18 MB), clang (26 MB) and clangd (24 MB). `scripts/upload-tools.mjs` uploads them with `Cache-Control: public, max-age=31536000, immutable`; paths include each tool's version. The bucket allows GET and HEAD from any origin, which a cross-origin isolated page needs. clangd loads from a blob URL, so its thread workers start same-origin. The dev server serves the same files from `vendor/` at `/vendor`. The Vercel deploy is 5.6 MiB.
+- **Gzipped binaries.** clang's 75 MB wasm and 30 MB header tar and clangd's 126 MB wasm are stored gzipped. The compiler worker swaps in a `fetch` that asks for the `.gz` and inflates it as it streams; the clangd worker inflates its wasm after downloading. Both skip inflating if a server already decoded the file.
 - **Downloads per student:** Python about 10 MB compressed, C++ about 50 MB, downloaded when the student picks a language.
 
 ## Testing

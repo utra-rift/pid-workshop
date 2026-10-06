@@ -15,7 +15,7 @@ pnpm install
 pnpm dev          # http://localhost:3000
 ```
 
-`pnpm dev` and `pnpm build` first run `scripts/sync-tools.mjs`, which copies the toolchains into `public/vendor/` (gitignored), so they ship with the app:
+`pnpm dev` first runs `scripts/sync-tools.mjs`, which copies the toolchains into `vendor/` (gitignored). The dev server serves that folder at `/vendor`. Production loads the same files from the CDN, `https://cdn2.evanyu.dev/learn-pid/` (see [Toolchains on the CDN](#toolchains-on-the-cdn)), so they aren't part of the build:
 
 | What | Size |
 |---|---|
@@ -24,7 +24,7 @@ pnpm dev          # http://localhost:3000
 | clang (`@yowasp/clang`): its 75 MB wasm and 30 MB header tar, gzipped | 26 MB |
 | clangd: its JS glue, and its 126 MB wasm gzipped | 24 MB |
 
-Gzipping the three big binaries brings each one under 25 MiB, the per-file limit on Cloudflare Workers, and keeps the whole deploy around 86 MB. The compiler and clangd workers inflate them in the browser with `DecompressionStream`. The first run downloads clangd from clangd-in-browser, checks its sha256, and caches it in `node_modules/.cache`.
+The three big binaries are stored gzipped, 231 MB down to 50 MB. The compiler and clangd workers inflate them in the browser with `DecompressionStream`. The first sync downloads clangd from clangd-in-browser, checks its sha256, and caches it in `node_modules/.cache`.
 
 Other scripts: `pnpm test`, `pnpm typecheck`, `pnpm check` (Biome).
 
@@ -82,14 +82,32 @@ Before deploying to Vercel, run `node scripts/check-vercel.mjs`. It checks two t
 
 Monaco and the language servers must stay out of the server bundle. `clientOnly()` in `vite.config.ts` replaces `src/editor/monaco.ts` and `src/editor/lsp/servers.ts` with stubs in the server build. Without it, the bundler put shared helpers in the language-server chunk, every server render loaded that chunk, and Vercel failed with `Cannot find module 'vscode-jsonrpc'`. Keep editor and language-server code behind those two modules, and import them only dynamically.
 
-Everything ships with the app, so there's nothing else to host. The largest file is clangd's gzipped wasm at 23.9 MiB.
+### Toolchains on the CDN
+
+Production loads Pyodide, basedpyright, clang and clangd from `https://cdn2.evanyu.dev/learn-pid/`: the `learn-pid/` folder of the R2 bucket `cdn`, in the "Redux - O4 Labs" Cloudflare account. The bucket also serves `cdn.badbird.dev`. The Vercel deploy is 5.6 MB without them. `src/tools.ts` picks the URL: the CDN in production, `/vendor` in dev, or `VITE_TOOLS_URL` if set.
+
+When a tool version changes, upload before deploying the app:
+
+```bash
+pnpm tools:upload     # sync vendor/, then upload what changed (uses wrangler's login)
+pnpm tools:check      # every file on the CDN: size, type, immutable caching, CORS
+```
+
+The upload runs `wrangler r2 object put` with your `npx wrangler login`; in CI, set `CLOUDFLARE_API_TOKEN` instead. Paths include the tool version, so objects never change after upload. Each one gets `Cache-Control: public, max-age=31536000, immutable`, and files already up with the same size and headers are skipped.
+
+Cloudflare's edge caches the `.gz`, `.js` and `.zip` files. It doesn't cache `.wasm` by default, so `pyodide.asm.wasm` comes from R2 on every request. A Cache Rule on `cdn2.evanyu.dev/learn-pid/*` (eligible for cache, respect origin TTL) would fix that.
+
+The bucket's CORS policy (`scripts/r2-cors.json`, set with `pnpm tools:upload --cors`) lets any origin GET and HEAD. It applies to the whole bucket, `cdn.badbird.dev` included. The page is cross-origin isolated, so the browser blocks a cross-origin file without a CORS header. Two tools needed changes to load from another origin:
+
+- **clangd** starts its threads as workers from its own script, and a worker can't start from another origin. The clangd worker fetches `clangd.js`, loads it from a blob URL, and passes that blob to its threads (`mainScriptUrlOrBlob`).
+- **The download badges** on the landing page can't ask the HTTP cache about another origin (`only-if-cached` is same-origin only), so localStorage remembers which tool versions this browser has downloaded.
 
 Download sizes per student: Python is about 10 MB. C++ is about 50 MB compressed: clang 26 MB, clangd 24 MB. Ask students to open the site and pick their language before the workshop, on good wifi.
 
 ## Open TODOs
 
 - **clangd binary.** `sync-tools.mjs` downloads the clangd 21.1.0 build published by [clangd-in-browser](https://github.com/Guyutongxue/clangd-in-browser) (MIT), pinned by sha256. For production, build our own with `scripts/clangd/build.sh`, adapted from theirs. The script hasn't been run here; it takes an hour or more.
-- **Offline.** Picking a language warms the browser's HTTP cache. A service worker that caches `/vendor` would make the site survive a dead venue network.
+- **Offline.** Picking a language warms the browser's HTTP cache. A service worker that caches the toolchains would make the site survive a dead venue network.
 - **Deploy target.** Running on Vercel. For Cloudflare Workers, try the preset and check that the headers from `routeRules` reach static files there.
 - **Browsers.** Tested in Chromium. Check Safari 15.2+ and Firefox, and C++ on the weakest Chromebook you have: clangd reserves 2 GB of memory.
 - **Fonts.** The Widescreen files come from rift-web and are trial versions. The licence TODO from rift-web applies here too.
