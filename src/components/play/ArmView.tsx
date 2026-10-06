@@ -16,10 +16,18 @@ interface ArmViewProps {
 	variant: Variant;
 	run: RunResult | null;
 	t: number;
+	/** Hide the dashed target line, for diagrams that introduce the arm first. */
+	showTarget?: boolean;
 }
 
 /** The arm at time t of a run, or at rest before the first run. */
-export function ArmView({ spec, variant, run, t }: ArmViewProps) {
+export function ArmView({
+	spec,
+	variant,
+	run,
+	t,
+	showTarget = true,
+}: ArmViewProps) {
 	const samples = run?.samples ?? [];
 	const index = Math.min(
 		samples.length - 1,
@@ -132,23 +140,27 @@ export function ArmView({ spec, variant, run, t }: ArmViewProps) {
 			})}
 
 			{/* Target */}
-			<line
-				x1={PIVOT.x}
-				y1={PIVOT.y}
-				x2={targetEnd.x}
-				y2={targetEnd.y}
-				stroke="#A897FF"
-				strokeWidth="1.5"
-				strokeDasharray="5 5"
-			/>
-			<text
-				x={targetLabel.x}
-				y={targetLabel.y + 3}
-				textAnchor="middle"
-				className="fill-violet-text font-mono text-[10px] font-semibold"
-			>
-				{target.toFixed(0)}°
-			</text>
+			{showTarget && (
+				<>
+					<line
+						x1={PIVOT.x}
+						y1={PIVOT.y}
+						x2={targetEnd.x}
+						y2={targetEnd.y}
+						stroke="#A897FF"
+						strokeWidth="1.5"
+						strokeDasharray="5 5"
+					/>
+					<text
+						x={targetLabel.x}
+						y={targetLabel.y + 3}
+						textAnchor="middle"
+						className="fill-violet-text font-mono text-[10px] font-semibold"
+					>
+						{target.toFixed(0)}°
+					</text>
+				</>
+			)}
 
 			{/* Latch */}
 			{latch && (

@@ -3,7 +3,7 @@ import { formatRpm } from "#/sim/robot";
 import type { Variant } from "#/sim/types";
 import { code, type Level } from "./types";
 
-export type { Level, Localized, WrongAnswer } from "./types";
+export type { BriefingBlock, Level, Localized, WrongAnswer } from "./types";
 export { localize } from "./types";
 
 /** The function every level calls. */
@@ -531,6 +531,31 @@ export const LEVELS: Level[] = [
 		story:
 			"The arm hangs level. Your code decides how hard the motor pushes, 200 times a second.",
 		goal: "Get the arm within **10°** of the target and keep it there.",
+		briefing: [
+			{
+				text: "This is a **robot arm**. It swings up and down around a pivot. A **motor** at the pivot gives the arm pushes to move it, and how powerful the push is gets measured in **volts**. More volts is a harder push, and 0 volts is no push at all.",
+			},
+			{ arm: { angle: 0 } },
+			{
+				text: "The dashed line is the **target**: the angle you want the arm to reach.",
+			},
+			{ arm: { angle: 0, target: 60 } },
+			{
+				text: "We want to write a **rule** the arm can follow to stay within **10 degrees** of the target. You must write **one rule that works for any potential target**.",
+			},
+			{
+				text: "Your rule will run **200 times a second**, with the arm checking the available information and responding appropriately each time.",
+			},
+			{
+				text: "Imagine that each time your rule runs we know:",
+			},
+			{ list: ["The target", "The arm's position"] },
+			{ text: "And we can make a decision every time on:" },
+			{ list: ["The voltage, from -24 to 24 volts"] },
+			{
+				text: "**What rule would you write to instruct the arm to stay within 10 degrees?**",
+			},
+		],
 		hints: [
 			{
 				python:
@@ -602,10 +627,35 @@ export const LEVELS: Level[] = [
 		story:
 			"On/off gets there, but the motor flips between 6 V and nothing 200 times a second. That buzz wears out gearboxes. Push hard when the arm is far away and gently when it's close.",
 		goal: "Settle within **10°** of the target with a smooth motor: jitter under **0.1 V**.",
-		hints: [
-			"Return `kP * error`. When the arm is far away the error is big, so the push is big. As it closes in, the push fades.",
-			"Try `kP = 0.5`. If it stops too far below the line, raise kP.",
+		briefing: [
+			{
+				text: "Your on/off rule gets the arm there, but look at the motor line on the graph. It flips between 6 volts and nothing, 200 times a second. That constant buzzing wears out the motor and the gears.",
+			},
+			{
+				text: "A smoother idea: push **hard** when the arm is far from the target, and push **gently** when it's close.",
+			},
+			{ text: "Here the arm is far away, so we want a big push:" },
+			{ arm: { angle: 10, target: 60 } },
+			{ text: "Here it's almost there, so a gentle push is enough:" },
+			{ arm: { angle: 55, target: 60 } },
+			{
+				text: "How far the arm is from the target is called the **error**: the target minus the arm's position. In the first picture the error is 50°. In the second it's 5°. You can use this value to scale your response in proportion to how far the arm is from the target: if it's really far, give a big push.",
+			},
+			{
+				text: "Now, every time your rule runs, it knows how far the arm is from the target: the **error**.",
+			},
+			{
+				text: "But the error is in **degrees**, and the motor needs **volts**. You need a number that converts one into the other. That number is called `kP`, and it's measured in **volts per degree**.",
+			},
+			{
+				text: "**How would you combine these two values to get a response proportional to the error, in volts?**",
+			},
 		],
+		hints: [
+			"The motor needs volts. `error` is in degrees and `kP` is in volts per degree. Combine them so the degrees cancel out: `(volts / degree) × degrees = volts`.",
+			"Return `kP * error`. When the arm is far away the error is big, so the push is big. As it closes in, the push fades. Try `kP = 0.5`. If it stops too far below the line, raise kP.",
+		],
+
 		why: "That's proportional control, the P in PID. It never quite reaches the line, though, and with a big kP it swings past. The next two levels fix both.",
 		spec: { mechanism: "arm", env: {}, durationS: 6 },
 		variants: ARM_VARIANTS,
@@ -617,7 +667,8 @@ export const LEVELS: Level[] = [
 
 				def controller(angle, target, dt):
 				    error = target - angle  # how far off the arm is, in degrees
-				    # TODO: return a push that grows with the error.
+				    # TODO: write your rule using the two variables here, error and kP.
+				    #       Return the volts for the motor: a bigger push when the error is bigger.
 				    return 0
 			`,
 			cpp: code`
@@ -628,7 +679,8 @@ export const LEVELS: Level[] = [
 
 				double controller(double angle, double target, double dt) {
 				  double error = target - angle;  // how far off the arm is, in degrees
-				  // TODO: return a push that grows with the error.
+				  // TODO: write your rule using the two variables here, error and kP.
+				  //       Return the volts for the motor: a bigger push when the error is bigger.
 				  return 0;
 				}
 			`,
@@ -663,6 +715,40 @@ export const LEVELS: Level[] = [
 		story:
 			"A bigger kP gets there faster, but the arm swings past the line. Brake as it closes in.",
 		goal: "Overshoot by less than **3°**, and settle within **8°**.",
+		briefing: [
+			{
+				text: "Your push gets the arm to the target, but watch what happens when you run it. The arm swings **past** the target and has to come back. That's called **overshoot**.",
+			},
+			{ text: "Here the arm has swung 12° past the target:" },
+			{ arm: { angle: 72, target: 60 } },
+			{
+				text: "Your push shrinks as the error shrinks, but by then the arm is already moving fast, and it can't stop on the spot. Like a car, easing off the gas doesn't stop you right away. So we want to **brake** as the arm closes in.",
+			},
+			{
+				text: "To brake at the right moment, your rule needs to know **how fast the error is shrinking**. If the error drops by 100° every second, the arm is rushing in. If it drops by 5° every second, the arm is creeping in. How fast something is changing is called its **derivative**, so this is the **derivative of the error**, in degrees per second.",
+			},
+			{
+				text: "Imagine that each time your rule runs we know:",
+			},
+			{
+				list: [
+					"The target",
+					"The arm's position",
+					"The error from the last time your rule ran",
+					"`dt`: the time since your rule last ran, in seconds",
+				],
+			},
+			{
+				text: "Variables defined outside your function keep their value between runs, so your rule can remember things. And as before, we decide on one thing every time:",
+			},
+			{ list: ["The voltage"] },
+			{
+				text: "Just like `kP` turned degrees into volts, you'll need a second number, `kD`, to turn the **derivative** (degrees per second) into volts. So `kD` is measured in volts per (degree per second).",
+			},
+			{
+				text: "**How would you work out the derivative of the error, and use it to brake the arm?**",
+			},
+		],
 		hints: [
 			{
 				python:
@@ -677,34 +763,44 @@ export const LEVELS: Level[] = [
 		starter: {
 			python: code`
 				kP = 0.6
-				kD = 0.0  # TODO: pick a value
+				kD = 0.0  # TODO: pick a value. kD is in volts per (degree per second).
 
 				# Variables out here keep their value between calls.
-				last_error = 0.0
+				last_error = 0.0  # the error from the previous call
 
 
 				def controller(angle, target, dt):
 				    global last_error  # lets this function change last_error
 				    error = target - angle
-				    # TODO: how fast is the error changing, in degrees per second?
+
+				    # TODO: write an equation for the derivative of the error, in degrees per second.
+				    #       Use the three variables here: error, last_error and dt.
 				    derivative = 0
-				    last_error = error
+
+				    last_error = error  # remember this error for the next call
+
+				    # The braking push: kD turns derivative (degrees per second) into volts.
 				    return kP * error + kD * derivative
 			`,
 			cpp: code`
 				#include "robot.h"
 
 				const double kP = 0.6;
-				const double kD = 0.0;  // TODO: pick a value
+				const double kD = 0.0;  // TODO: pick a value. kD is in volts per (degree per second).
 
 				// Variables out here keep their value between calls.
-				double lastError = 0;
+				double lastError = 0;  // the error from the previous call
 
 				double controller(double angle, double target, double dt) {
 				  double error = target - angle;
-				  // TODO: how fast is the error changing, in degrees per second?
+
+				  // TODO: write an equation for the derivative of the error, in degrees per second.
+				  //       Use the three variables here: error, lastError and dt.
 				  double derivative = 0;
-				  lastError = error;
+
+				  lastError = error;  // remember this error for the next call
+
+				  // The braking push: kD turns derivative (degrees per second) into volts.
 				  return kP * error + kD * derivative;
 				}
 			`,
@@ -738,6 +834,42 @@ export const LEVELS: Level[] = [
 		story:
 			"It stops a few degrees short and stays there. kP's push shrinks with the error until it only just holds the arm's weight. Hold the weight on purpose instead.",
 		goal: "Settle within **1°** of the target.",
+		briefing: [
+			{
+				text: "Your arm now reaches the target without bouncing, but it stops a few degrees short and stays there:",
+			},
+			{ arm: { angle: 56, target: 60 } },
+			{
+				text: "Why? Near the target the error is small, so your push is small. But gravity never stops pulling the arm down. The arm stops where your shrinking push only just balances gravity, which is still short of the target.",
+			},
+			{
+				text: "Instead of waiting for an error to build up, we can add a push that holds the arm up **on purpose**. How strong it needs to be depends on the angle. When the arm is level, gravity pulls on it the hardest:",
+			},
+			{ arm: { angle: 0 } },
+			{
+				text: "When the arm points straight up, gravity pulls along the arm instead of pulling it down, so no holding push is needed:",
+			},
+			{ arm: { angle: 90 } },
+			{
+				text: "The function that fades like this is called the **cosine**, written `cos`. Give it the angle and it returns a number: `cos(0°)` is 1, `cos(90°)` is 0, and it fades smoothly in between.",
+			},
+			{
+				text: "You'll need one more number, `kG`: the volts it takes to hold the arm up when it's level.",
+			},
+			{
+				text: "Imagine that each time your rule runs we know:",
+			},
+			{
+				list: [
+					"The arm's position, and how it compares with the target (the error)",
+					"How fast the error is changing (its derivative)",
+					"`kG`, the volts that hold the arm up when it's level",
+				],
+			},
+			{
+				text: "**How would you use the arm's angle, kG and the cosine to add a holding push that works at every angle?**",
+			},
+		],
 		hints: [
 			{
 				python:
@@ -755,7 +887,7 @@ export const LEVELS: Level[] = [
 
 				kP = 0.6
 				kD = 0.08
-				kG = 0.0  # TODO: volts that hold the arm level
+				kG = 0.0  # TODO: pick a value. kG is the volts that hold the arm up when it's level.
 
 				last_error = 0.0
 
@@ -765,8 +897,8 @@ export const LEVELS: Level[] = [
 				    error = target - angle
 				    derivative = (error - last_error) / dt
 				    last_error = error
-				    # TODO: hold up the arm's weight. Gravity pulls hardest when the arm
-				    #       is level (0°) and not at all when it points straight up (90°).
+				    # TODO: write an equation for gravity: the volts that hold the arm up at this angle.
+				    #       Use the two things here: kG and the cosine of the angle.
 				    gravity = 0
 				    return kP * error + kD * derivative + gravity
 			`,
@@ -776,7 +908,7 @@ export const LEVELS: Level[] = [
 
 				const double kP = 0.6;
 				const double kD = 0.08;
-				const double kG = 0.0;  // TODO: volts that hold the arm level
+				const double kG = 0.0;  // TODO: pick a value. kG is the volts that hold the arm up when it's level.
 
 				double lastError = 0;
 
@@ -784,8 +916,8 @@ export const LEVELS: Level[] = [
 				  double error = target - angle;
 				  double derivative = (error - lastError) / dt;
 				  lastError = error;
-				  // TODO: hold up the arm's weight. Gravity pulls hardest when the arm
-				  //       is level (0°) and not at all when it points straight up (90°).
+				  // TODO: write an equation for gravity: the volts that hold the arm up at this angle.
+				  //       Use the two things here: kG and the cosine of the angle.
 				  double gravity = 0;
 				  return kP * error + kD * derivative + gravity;
 				}
@@ -824,6 +956,41 @@ export const LEVELS: Level[] = [
 		story:
 			"The arm is holding at the target. At 2 seconds its hopper is refilled with projectiles, and it gets twice as heavy. Your kG doesn't know about the extra weight.",
 		goal: "Get back within **0.5°** of the target.",
+		briefing: [
+			{
+				text: "Here the arm is holding at the target, and your rule is working perfectly:",
+			},
+			{ arm: { angle: 60, target: 60 } },
+			{
+				text: "Then, 2 seconds in, the arm's hopper is refilled with projectiles and the arm gets **twice as heavy**. Gravity pulls harder, and the arm sags below the target:",
+			},
+			{ arm: { angle: 57, target: 60 } },
+			{
+				text: "Your `kG` was chosen for the old weight. And the weight changes in the middle of the run, so your rule has no way to know ahead of time. The arm needs to find the extra push **on its own**.",
+			},
+			{
+				text: "Here's the clue: the arm stays below the target, so the error doesn't go away. A small error that lasts a long time should count for more than one that's gone in a flash. Each time your rule runs, the error has lasted for another `dt` seconds. If we **add up the error over time**, the total keeps growing for as long as the error stays, and a bigger total can mean a bigger push. Once the arm is back at the target, the error is 0 and the total stops growing.",
+			},
+			{
+				text: "Adding something up over time is called its **integral**. The integral of the error is in **degree-seconds**: degrees of error, lasting for some seconds.",
+			},
+			{
+				text: "Just like `kP` and `kD`, you'll need a number to turn that into volts. It's called `kI`, and it's measured in **volts per degree-second**.",
+			},
+			{
+				text: "Imagine that each time your rule runs we know:",
+			},
+			{
+				list: [
+					"The arm's position and the error",
+					"`dt`: the time since your rule last ran, in seconds",
+					"`integral`: the error added up over time so far, remembered from the previous runs",
+				],
+			},
+			{
+				text: "**How would you keep adding to that running total each time your rule runs, and use it to push harder the longer the error lasts?**",
+			},
+		],
 		hints: [
 			"`integral += error * dt` adds up the error over time. An error that won't go away keeps growing the integral, and `kI * integral` keeps pushing harder until the arm gets there.",
 			"Try `kI = 1`. Too much kI makes it wobble.",
@@ -840,18 +1007,19 @@ export const LEVELS: Level[] = [
 				import math
 
 				kP = 0.6
-				kI = 0.0  # TODO: pick a value
+				kI = 0.0  # TODO: pick a value. kI is in volts per degree-second.
 				kD = 0.08
 				kG = 4.0
 
 				last_error = 0.0
-				integral = 0.0
+				integral = 0.0  # the error added up over time so far
 
 
 				def controller(angle, target, dt):
 				    global last_error, integral
 				    error = target - angle
-				    # TODO: add up the error over time in integral.
+				    # TODO: write an equation that adds to the integral of the error each time.
+				    #       Use the two variables here: error and dt.
 				    derivative = (error - last_error) / dt
 				    last_error = error
 				    gravity = kG * math.cos(math.radians(angle))
@@ -862,16 +1030,17 @@ export const LEVELS: Level[] = [
 				#include <cmath>
 
 				const double kP = 0.6;
-				const double kI = 0.0;  // TODO: pick a value
+				const double kI = 0.0;  // TODO: pick a value. kI is in volts per degree-second.
 				const double kD = 0.08;
 				const double kG = 4.0;
 
 				double lastError = 0;
-				double integral = 0;
+				double integral = 0;  // the error added up over time so far
 
 				double controller(double angle, double target, double dt) {
 				  double error = target - angle;
-				  // TODO: add up the error over time in integral.
+				  // TODO: write an equation that adds to the integral of the error each time.
+				  //       Use the two variables here: error and dt.
 				  double derivative = (error - lastError) / dt;
 				  lastError = error;
 				  double gravity = kG * std::cos(toRadians(angle));
@@ -896,6 +1065,34 @@ export const LEVELS: Level[] = [
 		story:
 			"A latch holds the arm down for the first 3 seconds. Your integral keeps adding up the whole time, and when the latch lets go the arm flies past.",
 		goal: "After the latch lets go, overshoot by less than **6°** and settle within **1°**.",
+		briefing: [
+			{
+				text: "In this level a **latch** holds the arm down for the first 3 seconds. The arm can't reach the target, no matter how hard the motor pushes:",
+			},
+			{ arm: { angle: 20, target: 60, latch: true } },
+			{
+				text: "While the arm is stuck, the error stays big, so your integral keeps adding up. And up. And up. The total becomes far bigger than the arm will ever need. This is called **integral windup**.",
+			},
+			{
+				text: "Then the latch lets go. All that built-up total is still in your integral, so it shoves the arm with enormous force and the arm flies past the target:",
+			},
+			{ arm: { angle: 85, target: 60 } },
+			{
+				text: "The integral only shrinks again after the arm has spent a while on the wrong side of the target, so it takes a long time to settle.",
+			},
+			{
+				text: 'You can watch it happen. The `plot` function adds a line to the response graph, and `plot("integral", integral)` shows your integral climbing while the arm is stuck.',
+			},
+			{
+				text: "The fix is to not let the integral grow forever. Limit it to a range you choose. The helper `clamp(x, low, high)` returns `x`, but never below `low` and never above `high`. For example, `clamp(15, 0, 10)` is 10, `clamp(-3, 0, 10)` is 0, and `clamp(4, 0, 10)` is 4.",
+			},
+			{
+				text: "Remember that `kI * integral` is in volts, so the limit on the integral also limits how much push the integral can ever add. Pick a limit big enough that the integral can still do its job, and small enough that it can't wind up.",
+			},
+			{
+				text: "**How would you keep your integral from growing past a limit you choose?**",
+			},
+		],
 		hints: [
 			{
 				python:
@@ -923,11 +1120,11 @@ export const LEVELS: Level[] = [
 				)
 				.replace(
 					"    integral += error * dt  # error added up over time\n",
-					'    integral += error * dt\n    # TODO: stop the integral from growing forever.\n    #       See it first: plot("integral", integral)\n',
+					'    integral += error * dt\n    # TODO: rewrite the line above so the integral can never go outside a range you choose.\n    #       Use clamp(x, low, high), which keeps x between low and high.\n    #       To see the problem first, add: plot("integral", integral)\n',
 				),
 			cpp: S.reload.cpp.replace(
 				"  integral += error * dt;  // error added up over time\n",
-				'  integral += error * dt;\n  // TODO: stop the integral from growing forever.\n  //       See it first: plot("integral", integral);\n',
+				'  integral += error * dt;\n  // TODO: rewrite the line above so the integral can never go outside a range you choose.\n  //       Use clamp(x, low, high), which keeps x between low and high.\n  //       To see the problem first, add: plot("integral", integral);\n',
 			),
 		},
 		solution: S.windup,

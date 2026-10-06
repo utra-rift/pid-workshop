@@ -1,4 +1,5 @@
 import { Lightbulb } from "lucide-react";
+import { ArmView } from "#/components/play/ArmView";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -12,9 +13,9 @@ import {
 } from "#/components/ui/alert-dialog";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { type Level, localize } from "#/levels";
+import { type BriefingBlock, type Level, localize } from "#/levels";
 import { inline, RichText } from "#/lib/rich-text";
-import type { Lang } from "#/sim/types";
+import type { Lang, SimSpec } from "#/sim/types";
 
 interface LevelBriefProps {
 	level: Level;
@@ -47,7 +48,11 @@ export function LevelBrief({
 			<h1 id="level-title" className="type-display-sm text-ink">
 				{level.title}
 			</h1>
-			<p className="type-body text-ink-muted">{inline(level.story)}</p>
+			{level.briefing ? (
+				<Briefing blocks={level.briefing} />
+			) : (
+				<p className="type-body text-ink-muted">{inline(level.story)}</p>
+			)}
 			<p className="type-body text-ink">
 				<span className="type-label mr-2 text-ink-muted">Goal</span>
 				{inline(level.goal)}
@@ -108,5 +113,55 @@ export function LevelBrief({
 				)}
 			</div>
 		</section>
+	);
+}
+
+const FIGURE_SPEC: SimSpec = { mechanism: "arm", env: {}, durationS: 6 };
+const FIGURE_LATCH = { untilS: 3, maxAngle: 20 };
+
+function Briefing({ blocks }: { blocks: BriefingBlock[] }) {
+	return (
+		<div className="flex flex-col gap-4">
+			{blocks.map((block, i) => {
+				const key = `${i}-${JSON.stringify(block).slice(0, 24)}`;
+				if ("text" in block) {
+					return (
+						<p key={key} className="type-body text-ink-muted">
+							{inline(block.text)}
+						</p>
+					);
+				}
+				if ("list" in block) {
+					return (
+						<ul
+							key={key}
+							className="flex list-disc flex-col gap-1 pl-6 type-body text-ink marker:text-cyan"
+						>
+							{block.list.map((item) => (
+								<li key={item}>{inline(item)}</li>
+							))}
+						</ul>
+					);
+				}
+				const { angle, target, latch } = block.arm;
+				return (
+					<figure
+						key={key}
+						className="w-full max-w-sm rounded-sm border border-line bg-surface p-2"
+					>
+						<ArmView
+							spec={{
+								...FIGURE_SPEC,
+								env: { start: angle, ...(latch && { latch: FIGURE_LATCH }) },
+							}}
+							variant={{ name: "figure", target: target ?? angle }}
+							run={null}
+							t={0}
+							showTarget={target !== undefined}
+						/>
+					</figure>
+				);
+			})}
+		</div>
 	);
 }
