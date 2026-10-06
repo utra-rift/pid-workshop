@@ -69,7 +69,7 @@ cpSync(fn, dir, { recursive: true });
 
 try {
 	const { default: handler } = await import(path.join(dir, "index.mjs"));
-	for (const route of ["/", "/level/01-on-off", "/level/11-match"]) {
+	for (const route of ["/", "/level/01-on-off", "/level/08-rapid-fire", "/level/14-match"]) {
 		const res = await handler.fetch(new Request(`https://learn-pid.example${route}`), { waitUntil() {} });
 		const body = await res.text();
 		const ok = res.status === 200 && res.headers.get("cross-origin-embedder-policy") === "require-corp";

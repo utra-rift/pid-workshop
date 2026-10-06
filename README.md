@@ -1,6 +1,6 @@
 # Learn PID
 
-A browser playground for the RIFT controls workshop. Students write a feedback controller in Python or C++ and watch it drive a simulated robot arm through eleven levels: on/off, P, D, feedforward, I, windup, then stretch levels for a noisy encoder, battery brownout, defense, a sticky gearbox and a full match.
+A browser playground for the RIFT controls workshop. Students write a feedback controller in Python or C++ and watch it drive a simulated robot through fourteen levels. First an arm: on/off, P, D, feedforward, I, windup. Then the launcher's flywheel: velocity feedforward, recovering between shots, and a limited integral for worn wheels. Then stretch levels on the arm: a noisy encoder, battery brownout, taking hits, a sticky gearbox and a full match.
 
 Everything runs in the browser. Python runs in Pyodide; C++ compiles with clang compiled to WebAssembly and runs as WebAssembly. Monaco gets errors as you type, completion and hover from basedpyright and clangd, both running in workers. There is no backend.
 
@@ -37,7 +37,7 @@ Add `?instructor=1` to any level URL to unlock every level and show the Answer b
 `pnpm test` runs two suites with vitest:
 
 - `tests/levels.test.ts` runs every level's solution, starter and common wrong answers through the real toolchains (Pyodide and clang, in Node), in both languages. Solutions must pass every variant, starters must fail, and each wrong answer must get its expected coach message. Run it after changing anything in `src/sim` or `src/levels`. The first run takes a minute or two while Node compiles clang; after that, about 10 seconds.
-- `tests/sim.test.ts` checks the arm physics, clipping, noise determinism, brownout and metrics.
+- `tests/sim.test.ts` checks the arm and flywheel physics, clipping, noise determinism, brownout, hopper refills, shots and metrics.
 
 Browser smoke tests need a running server and Playwright's Chromium (`~/Library/Caches/ms-playwright`, or set `CHROME_PATH`):
 
@@ -50,7 +50,7 @@ node scripts/smoke-levels.mjs http://localhost:3000   # every level's answer, bo
 
 ## How it works
 
-- `src/sim/` is the arm and the metrics, in plain TypeScript. It runs in the workers and in the tests. The arm is the usual feedforward model, `volts = kG·cos(angle) + kV·velocity + kA·acceleration`, on a 24 V battery. The physics steps every 1 ms and the student's controller runs every 5 ms (200 Hz).
+- `src/sim/` is the physics and the metrics, in plain TypeScript. It runs in the workers and in the tests. `simulate.ts` is the shared loop: it calls the student's controller every 5 ms (200 Hz), clips to the 24 V battery, adds sensor noise and brownouts, and steps a plant every 1 ms. The plants are `arm.ts`, the usual feedforward model `volts = kG·cos(angle) + kV·velocity + kA·acceleration`, and `flywheel.ts`, `volts = kV·speed + kA·acceleration` in RPM, where each projectile costs the wheel some speed. `robot.ts` has the shared constants and how each mechanism is described to students.
 - `src/levels/` defines the levels: story, goal, hints, simulation settings, hidden test variants, starter code and solutions in both languages, wrong answers, the pass check and level-specific coaching.
 - `src/coach/grade.ts` turns runs into a verdict and a plain-English message.
 - `src/runtimes/` runs student code. Python: one worker with Pyodide (`python/`). C++: a compiler worker that keeps clang loaded and a disposable runner worker that's killed if the code never returns (`cpp/`). The harness files are shared with the tests.

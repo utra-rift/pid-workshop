@@ -22,11 +22,15 @@ function findChrome() {
 }
 
 const LEVELS = [
-	"01-on-off", "02-push", "03-brakes", "04-sag", "05-game-piece", "06-windup",
-	"07-noisy-encoder", "08-brownout", "09-defense", "10-sticky-gearbox", "11-match",
+	"01-on-off", "02-push", "03-brakes", "04-sag", "05-reload", "06-windup",
+	"07-spin-up", "08-rapid-fire", "09-worn-wheels",
+	"10-noisy-encoder", "11-brownout", "12-taking-hits", "13-sticky-gearbox", "14-match",
 ];
 // Mid-run screenshots of the levels with something to see.
-const SNAP_AT = { "05-game-piece": 2.4, "06-windup": 3.3, "08-brownout": 0.5, "09-defense": 3.05, "11-match": 7.5 };
+const SNAP_AT = {
+	"05-reload": 2.4, "06-windup": 3.3, "07-spin-up": 0.6, "08-rapid-fire": 2.75, "09-worn-wheels": 3.2,
+	"11-brownout": 0.5, "12-taking-hits": 3.05, "14-match": 7.5,
+};
 
 const browser = await chromium.launch({ executablePath: findChrome(), headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

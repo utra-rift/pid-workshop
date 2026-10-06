@@ -65,13 +65,14 @@ serve({
 		booting ??= boot();
 		return compileCpp(await booting, source, "check");
 	},
-	async build(params: { source: string; entries: string[] }) {
+	async build(params: { source: string; entries: string[]; reading: string }) {
 		booting ??= boot();
 		const result = await compileCpp(
 			await booting,
 			params.source,
 			"build",
 			params.entries,
+			params.reading,
 		);
 		return result.wasm ? { ...result, transfer: [result.wasm.buffer] } : result;
 	},

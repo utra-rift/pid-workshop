@@ -1,3 +1,4 @@
+import { MECHANISMS } from "#/sim/robot";
 import type { Lang, RunIssue, RunResult } from "#/sim/types";
 import { type WorkerEvent, WorkerRpc } from "./rpc";
 import type { BuildResult, RunRequest, RunResponse } from "./types";
@@ -181,6 +182,7 @@ class CppRuntime extends Runtime {
 			{
 				source: request.source,
 				entries: [request.entry],
+				reading: MECHANISMS[request.spec.mechanism].reading,
 			},
 		);
 		const { wasm, ...buildResult } = build;

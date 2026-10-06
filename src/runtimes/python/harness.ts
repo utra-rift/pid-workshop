@@ -1,5 +1,6 @@
 import type { PyodideAPI } from "pyodide";
-import { Recorder, simulate } from "#/sim/arm";
+import { MECHANISMS } from "#/sim/robot";
+import { Recorder, simulate } from "#/sim/simulate";
 import { ControllerError, type RunIssue, type RunResult } from "#/sim/types";
 import type {
 	BuildResult,
@@ -39,10 +40,10 @@ def _pw_load(src):
     return ns
 
 def _pw_wrap(fn):
-    def call(angle, target, dt):
+    def call(measured, target, dt):
         global _pw_error
         try:
-            return fn(angle, target, dt)
+            return fn(measured, target, dt)
         except BaseException as e:
             _pw_error = _pw_describe(e)
             raise
@@ -88,7 +89,7 @@ export function createPythonHarness(py: PyodideAPI): PythonHarness {
 	};
 
 	/** Turns a Python exception from the student's code into a RunIssue. */
-	const describe = (error: unknown): RunIssue => {
+	const describe = (error: unknown, reading: string): RunIssue => {
 		const taken = helper("_pw_take_error")();
 		if (taken) {
 			const [type, text, line, detail] = taken.toJs() as [
@@ -107,7 +108,7 @@ export function createPythonHarness(py: PyodideAPI): PythonHarness {
 			}
 			return {
 				kind: "exception",
-				message: friendlyPython(type, text),
+				message: friendlyPython(type, text, reading),
 				detail,
 				line: line ?? undefined,
 			};
@@ -155,6 +156,7 @@ export function createPythonHarness(py: PyodideAPI): PythonHarness {
 	const run = ({ source, spec, variants, entry }: RunRequest): RunResponse => {
 		const build = check(source);
 		if (!build.ok) return { build, results: [] };
+		const { reading } = MECHANISMS[spec.mechanism];
 
 		let timedOut: RunIssue | undefined;
 		const results: RunResult[] = variants.map((variant) => {
@@ -176,7 +178,7 @@ export function createPythonHarness(py: PyodideAPI): PythonHarness {
 			try {
 				ns = helper("_pw_load")(source);
 			} catch (error) {
-				return failed(describe(error));
+				return failed(describe(error, reading));
 			}
 			const raw = ns.get(entry);
 			if (!raw || typeof raw !== "function") {
@@ -184,15 +186,15 @@ export function createPythonHarness(py: PyodideAPI): PythonHarness {
 				ns.destroy();
 				return failed({
 					kind: "missing-function",
-					message: `Couldn't find \`def ${entry}(angle, target, dt):\`. Check the name.`,
+					message: `Couldn't find \`def ${entry}(${reading}, target, dt):\`. Check the name.`,
 				});
 			}
 			const fn = helper("_pw_wrap")(raw);
 			raw.destroy();
 
-			const controller = (angle: number, target: number, dt: number) => {
+			const controller = (measured: number, target: number, dt: number) => {
 				try {
-					const out = fn(angle, target, dt);
+					const out = fn(measured, target, dt);
 					if (out && typeof out === "object" && "destroy" in out) {
 						const kind = String(out.type);
 						out.destroy();
@@ -200,7 +202,7 @@ export function createPythonHarness(py: PyodideAPI): PythonHarness {
 					}
 					return out;
 				} catch (error) {
-					throw new ControllerError(describe(error));
+					throw new ControllerError(describe(error, reading));
 				}
 			};
 
@@ -231,7 +233,11 @@ function friendlySyntax(type: string, message: string): string {
 	return message;
 }
 
-function friendlyPython(type: string, message: string): string {
+function friendlyPython(
+	type: string,
+	message: string,
+	reading: string,
+): string {
 	if (type === "UnboundLocalError") {
 		const name = message.match(/variable '([^']+)'/)?.[1] ?? "the variable";
 		return `Add \`global ${name}\` as the first line inside your function. Python needs it to change a variable that was made outside the function.`;
@@ -244,7 +250,7 @@ function friendlyPython(type: string, message: string): string {
 	}
 	if (type === "ZeroDivisionError") return "Your code divided by zero.";
 	if (type === "TypeError" && message.includes("positional argument")) {
-		return "Your controller needs exactly three parameters: angle, target and dt.";
+		return `Your controller needs exactly three parameters: ${reading}, target and dt.`;
 	}
 	return `${type}: ${message}`;
 }

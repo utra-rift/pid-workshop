@@ -1,4 +1,5 @@
-import { ARM, targetAt } from "#/sim/arm";
+import { ARM } from "#/sim/arm";
+import { ROBOT, targetAt } from "#/sim/robot";
 import type { RunResult, SimSpec, Variant } from "#/sim/types";
 
 const PIVOT = { x: 230, y: 214 };
@@ -22,22 +23,22 @@ export function ArmView({ spec, variant, run, t }: ArmViewProps) {
 	const samples = run?.samples ?? [];
 	const index = Math.min(
 		samples.length - 1,
-		Math.max(0, Math.floor(t / ARM.controlDt)),
+		Math.max(0, Math.floor(t / ROBOT.controlDt)),
 	);
 	const sample = samples[index];
 	const restAngle = spec.env.startAtTarget
 		? targetAt(spec, variant, 0)
-		: (spec.env.startAngle ?? 0);
-	const angle = sample?.angle ?? restAngle;
+		: (spec.env.start ?? 0);
+	const angle = sample?.actual ?? restAngle;
 	const target = sample?.target ?? targetAt(spec, variant, 0);
 	const volts = sample?.volts ?? 0;
 	const now = sample ? t : 0;
 
 	const events = run?.events ?? [];
-	const hasPiece = events.some((e) => e.kind === "piece" && e.t <= now);
+	const reloaded = events.some((e) => e.kind === "reload" && e.t <= now);
 	const browned = events.some((e) => e.kind === "brownout" && e.t <= now);
-	const bump = events.find(
-		(e) => e.kind === "bump" && now >= e.t && now - e.t < 0.18,
+	const hit = events.find(
+		(e) => e.kind === "hit" && now >= e.t && now - e.t < 0.18,
 	);
 	const latch =
 		spec.env.latch && now < spec.env.latch.untilS ? spec.env.latch : null;
@@ -47,7 +48,7 @@ export function ArmView({ spec, variant, run, t }: ArmViewProps) {
 	const targetLabel = polar(target, LENGTH + 54);
 
 	// Motor effort: an arc around the pivot, longer the harder it pushes.
-	const effort = Math.max(-1, Math.min(1, volts / ARM.maxVolts));
+	const effort = Math.max(-1, Math.min(1, volts / ROBOT.maxVolts));
 	const ringR = 26;
 	const sweep = effort * 300;
 	const ringStart = polar(angle, ringR);
@@ -210,7 +211,8 @@ export function ArmView({ spec, variant, run, t }: ArmViewProps) {
 				filter="url(#arm-glow)"
 			/>
 			<circle cx={tip.x} cy={tip.y} r="8" fill="#4DC6E2" />
-			{hasPiece && (
+			{/* The refilled hopper */}
+			{reloaded && (
 				<circle
 					cx={tip.x}
 					cy={tip.y}
@@ -220,15 +222,15 @@ export function ArmView({ spec, variant, run, t }: ArmViewProps) {
 					strokeWidth="4"
 				/>
 			)}
-			{bump && (
+			{hit && (
 				<circle
 					cx={tip.x}
 					cy={tip.y}
-					r={18 + (now - bump.t) * 120}
+					r={18 + (now - hit.t) * 120}
 					fill="none"
 					stroke="#F4FBFC"
 					strokeWidth="2"
-					opacity={1 - (now - bump.t) / 0.18}
+					opacity={1 - (now - hit.t) / 0.18}
 				/>
 			)}
 

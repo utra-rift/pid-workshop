@@ -10,6 +10,7 @@ import { type Grade, grade as gradeRun } from "#/coach/grade";
 import { ArmView } from "#/components/play/ArmView";
 import { CodeEditor, type EditorTab } from "#/components/play/CodeEditor";
 import { type ConsoleLine, ConsolePane } from "#/components/play/ConsolePane";
+import { FlywheelView } from "#/components/play/FlywheelView";
 import { LevelBrief } from "#/components/play/LevelBrief";
 import { LevelRail } from "#/components/play/LevelRail";
 import { MetricsRow } from "#/components/play/MetricsRow";
@@ -44,6 +45,7 @@ import { cn } from "#/lib/utils";
 import { getRuntime, type RuntimeStatus } from "#/runtimes/client";
 import type { Diagnostic, RunResponse } from "#/runtimes/types";
 import { computeMetrics } from "#/sim/metrics";
+import { MECHANISMS } from "#/sim/robot";
 import type { Lang } from "#/sim/types";
 
 interface LevelSearch {
@@ -100,7 +102,7 @@ export const Route = createFileRoute("/level/$levelId")({
 const IDLE: RuntimeStatus = { state: "idle", loaded: 0, total: 0, label: "" };
 
 function initialCode(level: Level, lang: Lang): string {
-	return storage.getCode(level.id, lang) ?? level.starter[lang];
+	return storage.getCode(level.number, lang) ?? level.starter[lang];
 }
 
 function LevelPage() {
@@ -129,16 +131,18 @@ function LevelPage() {
 
 	const isUnlocked = useCallback(
 		(l: Level) =>
-			instructor ||
-			l.number === 1 ||
-			Boolean(progress[LEVELS[l.number - 2]?.id]),
+			instructor || l.number === 1 || Boolean(progress[l.number - 1]),
 		[instructor, progress],
 	);
 	const unlocked = isUnlocked(level);
 	const next = LEVELS[level.number];
 	const previous = LEVELS[level.number - 2];
-	const previousCode = previous
-		? storage.getPassedCode(previous.id, lang)
+	// Passing code carries over from the last level with the same mechanism.
+	const carryFrom = LEVELS.slice(0, level.number - 1)
+		.reverse()
+		.find((l) => l.spec.mechanism === level.spec.mechanism);
+	const previousCode = carryFrom
+		? storage.getPassedCode(carryFrom.number, lang)
 		: null;
 
 	// Code for this level and language.
@@ -148,7 +152,7 @@ function LevelPage() {
 		const shared = sharedCode.current;
 		if (shared) {
 			sharedCode.current = null;
-			storage.setCode(level.id, lang, shared);
+			storage.setCode(level.number, lang, shared);
 			setCode(shared);
 			return;
 		}
@@ -163,20 +167,20 @@ function LevelPage() {
 			setCode(value);
 			clearTimeout(saveTimer.current);
 			saveTimer.current = setTimeout(
-				() => storage.setCode(level.id, lang, value),
+				() => storage.setCode(level.number, lang, value),
 				400,
 			);
 		},
-		[level.id, lang],
+		[level.number, lang],
 	);
 	const replaceCode = (value: string) => {
-		storage.setCode(level.id, lang, value);
+		storage.setCode(level.number, lang, value);
 		setCode(value);
 		setTab("main");
 	};
 
 	// Hints.
-	const hintsShown = useStored(() => storage.getHints(level.id), 0);
+	const hintsShown = useStored(() => storage.getHints(level.number), 0);
 	const [failedRuns, setFailedRuns] = useState(0);
 	const showAnswer =
 		instructor || (hintsShown >= level.hints.length && failedRuns >= 2);
@@ -265,7 +269,7 @@ function LevelPage() {
 			}
 			setRunDiagnostics(diagnostics);
 
-			if (g.passed) storage.markPassed(level.id, lang, code);
+			if (g.passed) storage.markPassed(level.number, lang, code);
 			else setFailedRuns((n) => n + 1);
 			if (result.results.length) playback.play(0);
 		} catch (error) {
@@ -340,13 +344,15 @@ function LevelPage() {
 					</main>
 				) : (
 					<main className="grid flex-1 gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] xl:grid-rows-[auto_1fr]">
-						{/* DOM order is for narrow screens: the level, then the code, then the arm. */}
+						{/* DOM order is for narrow screens: the level, then the code, then the mechanism. */}
 						<div className="min-w-0 xl:col-start-1 xl:row-start-1">
 							<LevelBrief
 								level={level}
 								lang={lang}
 								hintsShown={hintsShown}
-								onShowHint={() => storage.setHints(level.id, hintsShown + 1)}
+								onShowHint={() =>
+									storage.setHints(level.number, hintsShown + 1)
+								}
 								showAnswer={showAnswer}
 								onUseAnswer={() => replaceCode(level.solution[lang])}
 							/>
@@ -407,14 +413,14 @@ function LevelPage() {
 													<Button
 														variant="ghost"
 														size="icon-sm"
-														aria-label={`Use my code from level ${previous?.number}`}
+														aria-label={`Use my code from level ${carryFrom?.number}`}
 														onClick={() => replaceCode(previousCode)}
 													>
 														<History />
 													</Button>
 												</TooltipTrigger>
 												<TooltipContent>
-													Use your passing code from level {previous?.number}
+													Use your passing code from level {carryFrom?.number}
 												</TooltipContent>
 											</Tooltip>
 										)}
@@ -536,12 +542,12 @@ function LevelPage() {
 
 						<div className="flex min-w-0 flex-col gap-4 xl:col-start-1 xl:row-start-2">
 							<section
-								aria-label="The arm"
+								aria-label={`The ${MECHANISMS[level.spec.mechanism].name}`}
 								className="flex flex-col gap-2 rounded-md border border-line bg-surface-raised p-4"
 							>
 								<div className="flex items-center justify-between gap-3">
 									<span className="type-label text-ink-muted">
-										The arm
+										The {MECHANISMS[level.spec.mechanism].name}
 										{shownVariant && grade && grade.variants.length > 1
 											? ` · ${shownVariant.variant.name}`
 											: ""}
@@ -568,12 +574,21 @@ function LevelPage() {
 									</div>
 								</div>
 								<div className="mx-auto w-full max-w-xl">
-									<ArmView
-										spec={level.spec}
-										variant={shownVariant?.variant ?? level.variants[0]}
-										run={shownRun}
-										t={playback.t}
-									/>
+									{level.spec.mechanism === "flywheel" ? (
+										<FlywheelView
+											spec={level.spec}
+											variant={shownVariant?.variant ?? level.variants[0]}
+											run={shownRun}
+											t={playback.t}
+										/>
+									) : (
+										<ArmView
+											spec={level.spec}
+											variant={shownVariant?.variant ?? level.variants[0]}
+											run={shownRun}
+											t={playback.t}
+										/>
+									)}
 								</div>
 							</section>
 
@@ -589,6 +604,7 @@ function LevelPage() {
 							</section>
 
 							<MetricsRow
+								spec={level.spec}
 								metrics={metrics}
 								variants={grade?.variants ?? []}
 								selected={selected}

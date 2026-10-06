@@ -5,7 +5,7 @@ Owner: Evan Yu. Requested by Aaron Huang for the RIFT embedded/controls workshop
 
 ## Summary
 
-A browser playground where students write a feedback controller in Python or C++ and watch it drive a simulated robot arm. It follows the level structure of [PID Playground](https://pid-playground.rishaan.cc/), but students build the controller one piece at a time instead of tuning gains with sliders. No code from that site was used.
+A browser playground where students write a feedback controller in Python or C++ and watch it drive a simulated robot: an arm, then the launcher's flywheel. It follows the level structure of [PID Playground](https://pid-playground.rishaan.cc/), but students build the controller one piece at a time instead of tuning gains with sliders. No code from that site was used.
 
 Everything runs in the browser. Student code compiles and runs in Web Workers, Monaco gets live errors and completion from a language server in a worker, and there is no backend. The app is TanStack Start with Tailwind and shadcn/ui, in the RIFT design system from rift-web.
 
@@ -13,24 +13,25 @@ Everything runs in the browser. Student code compiles and runs in Web Workers, M
 
 | Date | Question | Decision |
 |---|---|---|
+| 2026-10-06 | Mechanisms | An arm, plus a launcher flywheel (levels 7–9) like PID Playground's. No game pieces: ARC robots fire projectiles, so the arm's extra load is a hopper refill and its disturbances are hits from other robots |
+| 2026-10-06 | Saved progress | Keyed by level number, not id. No migration from the earlier id keys, which nobody used yet |
 | 2026-10-06 | Deploy target | Vercel. All tools ship with the app; the three big binaries are gzipped to fit 25 MiB per file, so no separate bucket is needed |
 | 2026-10-05 | Workshop timing | Not soon. clangd and the stretch levels are in scope |
 | 2026-10-05 | Students new to code | Keep the level design. Python is suggested to first-timers; level 1's hints show `if`/`else` syntax |
 | 2026-10-05 | Porting PID Playground's code | Not needed. Everything here is written from scratch; the site is credited |
-| 2026-10-05 | Mechanism | An arm, for every level |
 | 2026-10-05 | Robot platform | ARC robots: a 24 V battery and an embedded controller. The sim uses ±24 V and a 200 Hz loop, and avoids FRC terms |
 | 2026-10-05 | LSP client | A small client of our own instead of monaco-languageclient. See [Editor](#editor) |
 
 ## Goals
 
-- Students write `controller(angle, target, dt)` and return volts. By the last core level it's a full PID + feedforward controller.
+- Students write `controller(angle, target, dt)` for the arm and `controller(speed, target, dt)` for the flywheel, and return volts. By the end of each mechanism's core levels it's a full PID + feedforward controller.
 - Students switch between Python and C++ at any time. Each language keeps its own code per level.
 - Monaco shows errors as you type, completion, hover and signature help in both languages.
-- Every failed run gets a plain-English reason based on what the arm did.
+- Every failed run gets a plain-English reason based on what the arm or flywheel did.
 
 ## Non-goals
 
-Accounts or any server that stores data, running code on a server, Java, phone layouts, and a free-play sandbox. Progress lives in localStorage.
+Accounts or any server that stores data, running code on a server, Java, phone layouts, and a free-play sandbox. Progress lives in localStorage, keyed by level number: passed levels, code per level and language, passing code, and hints shown.
 
 ## Routes
 
@@ -46,35 +47,36 @@ Picking a language downloads and starts everything the lesson needs before openi
 
 ## Play screen
 
-The top bar holds the RIFT mark and the level chips (numbered, a check when passed, a lock when locked, a divider before the stretch levels). There are no other navigation links. Wide screens (1280 px and up) have two columns. On the left are the level brief, the arm, the response graph and the metrics. On the right are the editor, the console and the verdict, which stay in view while the page scrolls. Narrower screens stack them in reading order: brief, code, verdict, then the arm and graph.
+The top bar holds the RIFT mark and the level chips (numbered, a check when passed, a lock when locked, a labelled divider before the flywheel and before the stretch levels). There are no other navigation links. Wide screens (1280 px and up) have two columns. On the left are the level brief, the arm or flywheel, the response graph and the metrics. On the right are the editor, the console and the verdict, which stay in view while the page scrolls. Narrower screens stack them in reading order: brief, code, verdict, then the mechanism and graph.
 
 - **Levels.** A level unlocks when the previous one passes. The current one scrolls into view in the top bar.
 - **Brief.** Title, story, goal, two hints shown one at a time, and an Answer dialog. Answer appears in instructor mode, or after both hints and two failed runs. "Use this code" replaces the editor contents.
-- **Arm.** SVG with a scale from -30° to 150°, hard stops, the target ray, the latch while it holds, a game piece ring, a flash when a defender hits, a motor-effort arc around the pivot, and a BROWNOUT label. Replays in real time after each run, with Replay and Skip buttons.
-- **Response graph.** Canvas with three strips: angle and target, motor volts, and the student's `plot()` lines with their own scale. Event markers show piece, release and brownout. Hovering shows the values at that time. Each live value in the legend has a fixed-width slot, so values that change every frame (the motor especially) don't shift the text around them. Hovering or focusing a legend entry highlights its line and dims the others. The `plot()` strip scales to the 1st–99th percentile of its values, so one spike, such as a derivative's first tick, can't flatten the rest.
-- **Metrics.** Overshoot, settle error, peak motor and jitter for the variant on screen, plus a chip for each hidden test variant. Clicking a chip replays that variant.
+- **Arm.** SVG with a scale from -30° to 150°, hard stops, the target ray, the latch while it holds, a ring once the hopper is refilled, a flash when a hit lands, a motor-effort arc around the pivot, and a BROWNOUT label. Replays in real time after each run, with Replay and Skip buttons.
+- **Flywheel.** SVG of the launcher: two friction wheels whose spokes turn at a 40th of the real speed, a motor-effort arc on each, a 0–10k RPM gauge with the target marked, and an armour panel. Each projectile flies to the panel and lands high if the wheel was fast, low if slow, and short on the floor if far too slow. The panel covers the level's shot tolerance, so a hit on the panel is a shot that passed. A HITS counter tallies them.
+- **Response graph.** Canvas with three strips: angle or speed with the target, motor volts, and the student's `plot()` lines with their own scale. Event markers show reload, release and brownout; hits and new targets get unlabelled lines, and shots get short amber ticks along the top. Hovering shows the values at that time. Each live value in the legend has a fixed-width slot, so values that change every frame (the motor especially) don't shift the text around them. Hovering or focusing a legend entry highlights its line and dims the others. The `plot()` strip scales to the 1st–99th percentile of its values, so one spike, such as a derivative's first tick, can't flatten the rest.
+- **Metrics.** For the arm: overshoot, settle error, peak motor and jitter. For the flywheel: worst shot (or settle error with no shots), overshoot, peak motor and jitter, in RPM. Plus a chip for each hidden test variant. Clicking a chip replays that variant.
 - **Editor header.** Python or C++ toggle, `controller.py`/`robot.py` (or `controller.cpp`/`robot.h`, read-only) tabs, "use my code from the last level" (when there is some), Reset with a confirm, Share, and Run (also Ctrl/Cmd+Enter). A progress bar shows while the toolchain downloads.
 - **Status line and console.** The status line shows the language server and runtime state. The console shows compiler output, `print`/`printf`/`std::cout`, tracebacks and a one-line summary of each variant.
 - **Verdict.** Ready, Running, a pass with the takeaway and a link to the next level, or a fail with the coach message. Errors on a line are also underlined in the editor.
 
-Each level opens with our starter code, which has `// TODO` comments where the new piece goes, or the student's saved code for that level. Their passing code from the previous level is one click away instead of loading automatically. The starters guide beginners better than their own code would.
+Each level opens with our starter code, which has `// TODO` comments where the new piece goes, or the student's saved code for that level. Their passing code from the previous level of the same mechanism is one click away instead of loading automatically (level 10 offers level 6's arm code, not level 9's flywheel code). The starters guide beginners better than their own code would.
 
 ## Controller contract
 
-The sim calls the student's function every 5 ms (200 Hz). It gets the measured angle and the target in degrees and `dt` in seconds, and returns motor volts. The output is clipped to ±24 V, or less during a brownout, and held until the next call. Module-level variables keep their values between calls and reset for every run and every variant.
+The sim calls the student's function every 5 ms (200 Hz). It gets the sensor reading and the target, in degrees for the arm or RPM for the flywheel, and `dt` in seconds, and returns motor volts. The output is clipped to ±24 V, or less during a brownout, and held until the next call. Module-level variables keep their values between calls and reset for every run and every variant.
 
 ### C++
 
 `robot.h` is read-only in the editor:
 
 ```cpp
-extern "C" double controller(double angle, double target, double dt);
+extern "C" double controller(double measured, double target, double dt);
 void plot(const char* name, double value);          // a line on the graph
 inline double clamp(double x, double lo, double hi);
 inline double toRadians(double degrees);
 ```
 
-The full standard library is available: `<cmath>`, `<algorithm>`, `<cstdio>` and `<iostream>`. stdout is unbuffered, so `printf` lines show up in order. Because of the `extern "C"` declaration, students write a plain `double controller(...)`.
+The full standard library is available: `<cmath>`, `<algorithm>`, `<cstdio>` and `<iostream>`. stdout is unbuffered, so `printf` lines show up in order. Because of the `extern "C"` declaration, students write a plain `double controller(...)`, and can name the first parameter `angle` or `speed`.
 
 ### Python
 
@@ -82,7 +84,7 @@ The full standard library is available: `<cmath>`, `<algorithm>`, `<cstdio>` and
 
 ## Levels
 
-Core path:
+Core path, the arm:
 
 | # | id | The problem | Student writes | Pass (every variant) |
 |---|---|---|---|---|
@@ -90,33 +92,43 @@ Core path:
 | 2 | `02-push` | On/off buzzes between 6 V and nothing | `kP * error` | settle < 10°, jitter < 0.1 V |
 | 3 | `03-brakes` | A bigger kP swings past | `last_error`, `(error - last_error) / dt` | overshoot < 3°, settle < 8° |
 | 4 | `04-sag` | It stops short and stays there | `kG * cos(radians(angle))` | settle < 1°, overshoot < 5° |
-| 5 | `05-game-piece` | Holding at target, it gets twice as heavy at 2 s | `integral += error * dt` | settle < 0.5° |
+| 5 | `05-reload` | Holding at target, its hopper is refilled at 2 s and it gets twice as heavy | `integral += error * dt` | settle < 0.5° |
 | 6 | `06-windup` | A latch holds it at 20° for 3 s and the integral winds up | clamp the integral to ±2 | overshoot < 6°, settle < 1° |
 
-Stretch:
+Core path, the flywheel. Speeds in RPM; the sensor has ±15 RPM of noise:
+
+| # | id | The problem | Student writes | Pass (every variant) |
+|---|---|---|---|---|
+| 7 | `07-spin-up` | kP alone settles far short: a spinning wheel needs volts just to keep going | `kV * target` feedforward, kV = 24 V / 9,600 RPM | settle < 20 RPM |
+| 8 | `08-rapid-fire` | 10 shots, 5 a second from 1.5 s, each costs 400 RPM | a bigger kP (0.02) to win the speed back | every shot within 50 RPM |
+| 9 | `09-worn-wheels` | worn wheels drag 10% more; 3 shots, one a second from 2 s | `kI * integral`, clamped to ±20 | every shot within 25 RPM, overshoot < 150 RPM |
+
+Stretch, back on the arm:
 
 | # | id | Environment | Student writes | Pass |
 |---|---|---|---|---|
-| 7 | `07-noisy-encoder` | encoder rounds to 0.2°, ±0.3° noise | low-pass filter on the derivative | settle < 1°, jitter < 0.6 V |
-| 8 | `08-brownout` | over 16 V for 0.15 s sags the battery to 12 V | a setpoint that moves at most 90°/s | settle < 1°, no brownout |
-| 9 | `09-defense` | 12 V shoves for 0.1 s every 1.5 s | stiffer gains (kP 1.5, kD 0.12) | worst error in the last 3 s < 5.5° |
-| 10 | `10-sticky-gearbox` | stiction: needs 4 V past gravity to move | `kS` nudge when error > 0.2° | settle < 0.2° |
-| 11 | `11-match` | 60° → 15° → 90° at 0, 3, 6 s; piece at 7 s (×1.8); brownout above 20 V | everything | each position within 3° before the next, settle < 1°, no brownout |
+| 10 | `10-noisy-encoder` | encoder rounds to 0.2°, ±0.3° noise | low-pass filter on the derivative | settle < 1°, jitter < 0.6 V |
+| 11 | `11-brownout` | over 16 V for 0.15 s sags the battery to 12 V | a setpoint that moves at most 90°/s | settle < 1°, no brownout |
+| 12 | `12-taking-hits` | an enemy robot rams it: 12 V shoves for 0.1 s every 1.5 s | stiffer gains (kP 1.5, kD 0.12) | worst error in the last 3 s < 5.5° |
+| 13 | `13-sticky-gearbox` | stiction: needs 4 V past gravity to move | `kS` nudge when error > 0.2° | settle < 0.2° |
+| 14 | `14-match` | 60° → 15° → 90° at 0, 3, 6 s; hopper refill at 7 s (×1.8); brownout above 20 V | everything | each position within 3° before the next, settle < 1°, no brownout |
 
-Variants: 60° (shown), 30°, and 75° with a 1.3× heavier arm. The match uses a normal and a heavier arm. A run passes only if every variant does. If the shown one passes and a hidden one fails, the coach says which.
+Arm variants: 60° (shown), 30°, and 75° with a 1.3× heavier arm. The match uses a normal and a heavier arm. Flywheel variants: 6,000 RPM (shown), 4,000 and 7,500 RPM; rapid fire uses 4,500 instead of 4,000; worn wheels uses worn wheels at 6,000 RPM (shown), new wheels, and worn wheels at 5,000 RPM. A run passes only if every variant does. If the shown one passes and a hidden one fails, the coach says which.
+
+The flywheel levels were calibrated the same way. P alone can't get within 20 RPM at any stable gain, because the loop goes unstable above kP ≈ 0.5 V/RPM. With rapid fire, kP 0.01 misses by about 63 RPM and 0.02 by about 13. With worn wheels, the integral without a clamp overshoots by about 2,000 RPM during spin-up.
 
 The level plan changed during the build. The thresholds were calibrated by running the cumulative solutions against every level:
 
-- A "smooth moves" level meant to teach derivative-on-measurement was dropped, because the level 7 filter already removes the derivative kick.
+- A "smooth moves" level meant to teach derivative-on-measurement was dropped, because the level 10 filter already removes the derivative kick.
 - Level 5 starts at the target. Otherwise the integral winds up on the first climb and teaches level 6's lesson early.
 - The match has no encoder noise, because noise makes the kS nudge flip sign every tick.
-- The match's brownout limit is 20 V, so the full controller from level 10 can pass.
+- The match's brownout limit is 20 V, so the full controller from level 13 can pass.
 
 Each level is one object in `src/levels/index.ts`: story, goal, hints (per language where they differ), takeaway, sim spec, variants, starter and solution in both languages, wrong answers with the coach message each must produce, the pass check, and level-specific coaching.
 
 ## Simulation
 
-`src/sim/arm.ts`, pure TypeScript:
+Pure TypeScript. `src/sim/simulate.ts` is the loop every level shares: noise, the controller call, clipping, brownout, and a plant stepped every 1 ms. The arm, `src/sim/arm.ts`:
 
 ```
 acceleration = (volts - kG·weight·cos(angle) - kV·velocity) / (kA·weight)
@@ -133,17 +145,30 @@ acceleration = (volts - kG·weight·cos(angle) - kV·velocity) / (kA·weight)
 | Controller | every 5 ms, output held between calls |
 | Default target | 60°. At 90°, gravity has no pull at the target and level 4 has nothing to fix |
 
-Environment effects: encoder noise (rounding plus uniform noise from a seeded RNG, so the same code always gets the same run), stiction (stuck from rest until the push beats gravity by the threshold, then half that as drag), brownout (over the threshold for long enough drops the limit for the rest of the run), game piece (weight multiplier from a time), latch (caps the angle until a time), defense (alternating torque pulses), sequence (target changes over time) and `startAtTarget`.
+The flywheel, `src/sim/flywheel.ts`, in RPM:
+
+```
+acceleration = (volts - kV·drag·speed) / (kA·inertia)
+```
+
+| Constant | Value |
+|---|---|
+| kV | 0.0025 V per RPM, so 24 V tops out at 9,600 RPM |
+| kA | 0.00125 V per RPM/s, a 0.5 s time constant |
+| Shots | each one takes `loss` RPM off the wheel at once |
+| Default target | 6,000 RPM |
+
+Environment effects: sensor noise (rounding plus uniform noise from a seeded RNG, so the same code always gets the same run), brownout (over the threshold for long enough drops the limit for the rest of the run) and `startAtTarget`, for both. On the arm: stiction (stuck from rest until the push beats gravity by the threshold, then half that as drag), reload (the hopper is refilled: a weight multiplier from a time), latch (caps the angle until a time), hits (alternating torque pulses) and sequence (target changes over time). On the flywheel: shots (a burst of projectiles, each costing some speed, with a tolerance for a hit) and, per variant, drag (worn wheels) and inertia.
 
 ## Metrics and coaching
 
-`src/sim/metrics.ts` computes, per run: closest approach, overshoot past the final target in the direction of travel, mean error over the last 0.8 s, worst error over the last 3 s, waypoint error, rise time, jitter (mean volt change per tick over the second half), biggest single-tick step, peak volts, longest saturation, brownout, growing oscillation, and constant output.
+`src/sim/metrics.ts` computes, per run: closest approach, overshoot past the final target in the direction of travel, mean error over the last 0.8 s, worst error over the last 3 s, waypoint error, the speed error at each shot, rise time, jitter (mean volt change per tick over the second half), biggest single-tick step, peak volts, longest saturation, brownout, growing oscillation, and constant output.
 
 `src/coach/grade.ts` returns a title and a message:
 
 1. **Code problems first.** A syntax error points at its line. A missing `controller` gets the expected signature. Python's `UnboundLocalError` gets the `global` advice. Returning nothing or NaN, a crash (integer divide by zero, out-of-bounds memory, abort) and timeouts each get their own message.
 2. **Then the level's own coaching**, with numbers from the run, such as level 3's "It swings 13.3° past the target. Brake on the way in: push against how fast the error is shrinking."
-3. **Then general advice**: constant output, growing oscillation, fell over the top, never got near, saturated, overshoot, settles above or below.
+3. **Then general advice**, worded for the mechanism: constant output, growing oscillation, fell over the top (arm), never got near, saturated, overshoot, settles above or below. Flywheel levels name the worst shot, such as "Shot 2 left 379 RPM slow, so it falls short."
 
 ## Architecture
 

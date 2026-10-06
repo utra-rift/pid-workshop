@@ -31,34 +31,35 @@ export interface LevelProgress {
 	lang: Lang;
 }
 
+// Per-level values are keyed by level number.
 export const storage = {
 	getLang: (): Lang | null => read<Lang | null>("lang", null),
 	setLang: (lang: Lang) => write("lang", lang),
 
-	getProgress: (): Record<string, LevelProgress> => read("progress", {}),
-	markPassed(levelId: string, lang: Lang, code: string) {
+	/** Passed levels, by level number. */
+	getProgress: (): Record<number, LevelProgress> => read("progress", {}),
+	markPassed(level: number, lang: Lang, code: string) {
 		const progress = storage.getProgress();
-		progress[levelId] ??= { passedAt: new Date().toISOString(), lang };
+		progress[level] ??= { passedAt: new Date().toISOString(), lang };
 		write("progress", progress);
-		write(`passed:${levelId}:${lang}`, code);
+		write(`passed:${level}:${lang}`, code);
 	},
-	getPassedCode: (levelId: string, lang: Lang): string | null =>
-		read(`passed:${levelId}:${lang}`, null),
+	getPassedCode: (level: number, lang: Lang): string | null =>
+		read(`passed:${level}:${lang}`, null),
 
-	getCode: (levelId: string, lang: Lang): string | null =>
-		read(`code:${levelId}:${lang}`, null),
-	setCode: (levelId: string, lang: Lang, code: string) => {
+	getCode: (level: number, lang: Lang): string | null =>
+		read(`code:${level}:${lang}`, null),
+	setCode: (level: number, lang: Lang, code: string) => {
 		if (typeof localStorage === "undefined") return;
 		// No notify: the editor is the only reader, and it already has the text.
 		localStorage.setItem(
-			`${PREFIX}code:${levelId}:${lang}`,
+			`${PREFIX}code:${level}:${lang}`,
 			JSON.stringify(code),
 		);
 	},
 
-	getHints: (levelId: string): number => read(`hints:${levelId}`, 0),
-	setHints: (levelId: string, count: number) =>
-		write(`hints:${levelId}`, count),
+	getHints: (level: number): number => read(`hints:${level}`, 0),
+	setHints: (level: number, count: number) => write(`hints:${level}`, count),
 
 	isInstructor: (): boolean => read("instructor", false),
 	setInstructor: (on: boolean) => write("instructor", on ? true : undefined),

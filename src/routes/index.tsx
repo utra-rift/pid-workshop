@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { SiteHeader } from "#/components/site/SiteHeader";
 import { Badge } from "#/components/ui/badge";
 import { Progress } from "#/components/ui/progress";
-import { LEVELS } from "#/levels";
+import { LEVELS, sectionOf } from "#/levels";
 import { storage, useStored } from "#/lib/storage";
 import { cn } from "#/lib/utils";
 import {
@@ -47,7 +47,7 @@ function Home() {
 	const navigate = useNavigate();
 	const lang = useStored(storage.getLang, null);
 	const progress = useStored(storage.getProgress, {});
-	const next = LEVELS.find((level) => !progress[level.id]) ?? LEVELS[0];
+	const next = LEVELS.find((level) => !progress[level.number]) ?? LEVELS[0];
 	const started = Object.keys(progress).length > 0;
 
 	// Everything a lesson needs downloads first, so it opens ready to run.
@@ -85,10 +85,12 @@ function Home() {
 						Write your own controller
 					</h1>
 					<p className="type-body max-w-2xl text-ink-muted">
-						A robot arm needs a few lines of code to hold its place: read the
-						sensor, compare it with the target, set the motor. You'll write them
-						yourself, one piece at a time, and watch the arm react. Eleven
-						levels, from an on/off switch to a full PID controller.
+						Holding an arm in place or keeping the launcher's flywheel at speed
+						takes a few lines of code: read the sensor, compare it with the
+						target, set the motor. You'll write them yourself, one piece at a
+						time, and watch the robot react. First an arm, from an on/off switch
+						to a full PID controller, then the flywheel that launches
+						projectiles.
 					</p>
 				</section>
 
@@ -200,12 +202,12 @@ function Home() {
 									{String(level.number).padStart(2, "0")}
 								</span>
 								<span className="type-body-sm text-ink">{level.title}</span>
-								{level.stretch && (
+								{sectionOf(level) !== "Arm" && (
 									<span className="ml-auto type-label text-[11px] text-ink-muted">
-										Stretch
+										{sectionOf(level)}
 									</span>
 								)}
-								{progress[level.id] && (
+								{progress[level.number] && (
 									<span className="ml-auto type-label text-[11px] text-cyan-text">
 										Done
 									</span>

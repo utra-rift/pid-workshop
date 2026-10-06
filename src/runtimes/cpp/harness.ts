@@ -1,5 +1,6 @@
 import { ConsoleStdout, File, OpenFile, WASI } from "@bjorn3/browser_wasi_shim";
-import { Recorder, simulate } from "#/sim/arm";
+import { MECHANISMS } from "#/sim/robot";
+import { Recorder, simulate } from "#/sim/simulate";
 import { ControllerError, type RunIssue, type RunResult } from "#/sim/types";
 import type {
 	BuildResult,
@@ -34,13 +35,15 @@ export interface CppBuild extends BuildResult {
 
 /**
  * Compiles the student's file. mode "check" only parses it, which is what the
- * editor runs while you type; "build" links a WebAssembly module.
+ * editor runs while you type; "build" links a WebAssembly module. `reading`
+ * names the controller's first parameter in error messages.
  */
 export async function compileCpp(
 	clang: ClangCommands,
 	source: string,
 	mode: "build" | "check",
 	entries: string[] = ["controller"],
+	reading = "angle",
 ): Promise<CppBuild> {
 	let output = "";
 	const decoder = new TextDecoder();
@@ -79,7 +82,7 @@ export async function compileCpp(
 	const ok = !failed && !diagnostics.some((d) => d.severity === "error");
 	const result: CppBuild = { ok, diagnostics, output: output.trim() };
 	if (ok && mode === "build" && wasm instanceof Uint8Array) result.wasm = wasm;
-	if (!ok) result.issue = buildIssue(output, diagnostics, entries);
+	if (!ok) result.issue = buildIssue(output, diagnostics, entries, reading);
 	return result;
 }
 
@@ -113,6 +116,7 @@ function buildIssue(
 	output: string,
 	diagnostics: Diagnostic[],
 	entries: string[],
+	reading: string,
 ): RunIssue {
 	const linkMissing = entries.find(
 		(entry) =>
@@ -122,7 +126,7 @@ function buildIssue(
 	if (linkMissing) {
 		return {
 			kind: "missing-function",
-			message: `Couldn't find \`double ${linkMissing}(double angle, double target, double dt)\`. Check the name, the return type and the three parameters.`,
+			message: `Couldn't find \`double ${linkMissing}(double ${reading}, double target, double dt)\`. Check the name, the return type and the three parameters.`,
 			detail: output,
 		};
 	}
@@ -167,6 +171,7 @@ export async function runCpp(
 			? wasm
 			: await WebAssembly.compile(wasm as BufferSource);
 	const results: RunResult[] = [];
+	const { reading } = MECHANISMS[spec.mechanism];
 
 	for (const variant of variants) {
 		const recorder = new Recorder();
@@ -224,16 +229,16 @@ export async function runCpp(
 			results.push(
 				fail({
 					kind: "missing-function",
-					message: `Couldn't find \`double ${entry}(double angle, double target, double dt)\`.`,
+					message: `Couldn't find \`double ${entry}(double ${reading}, double target, double dt)\`.`,
 				}),
 			);
 			continue;
 		}
 
-		const controller = (angle: number, target: number, dt: number) => {
+		const controller = (measured: number, target: number, dt: number) => {
 			try {
-				return (fn as (a: number, t: number, d: number) => number)(
-					angle,
+				return (fn as (m: number, t: number, d: number) => number)(
+					measured,
 					target,
 					dt,
 				);
@@ -289,9 +294,13 @@ export async function buildAndRunCpp(
 	clang: ClangCommands,
 	request: RunRequest,
 ): Promise<RunResponse> {
-	const build = await compileCpp(clang, request.source, "build", [
-		request.entry,
-	]);
+	const build = await compileCpp(
+		clang,
+		request.source,
+		"build",
+		[request.entry],
+		MECHANISMS[request.spec.mechanism].reading,
+	);
 	if (!build.ok || !build.wasm) return { build, results: [] };
 	const { wasm, ...rest } = build;
 	return { build: rest, results: await runCpp(wasm, request) };

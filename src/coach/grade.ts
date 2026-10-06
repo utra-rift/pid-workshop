@@ -1,6 +1,7 @@
 import type { Level } from "#/levels";
 import type { BuildResult } from "#/runtimes/types";
 import { computeMetrics, type Metrics } from "#/sim/metrics";
+import { MECHANISMS } from "#/sim/robot";
 import type { RunIssue, RunResult, Variant } from "#/sim/types";
 
 export interface VariantGrade {
@@ -21,8 +22,6 @@ export interface Grade {
 	line?: number;
 	variants: VariantGrade[];
 }
-
-const deg = (x: number) => `${x.toFixed(1)}°`;
 
 export function grade(
 	level: Level,
@@ -94,10 +93,14 @@ export function grade(
 	return { passed: false, title: "Not yet", message, variants };
 }
 
-/** Level-specific advice first, then general advice from how the arm moved. */
+/** Level-specific advice first, then general advice from how it moved. */
 export function coachFor(level: Level, m: Metrics, run: RunResult): string {
 	const specific = level.coach?.(m, run);
 	if (specific) return specific;
+
+	const { mechanism } = level.spec;
+	const { format } = MECHANISMS[mechanism];
+	const arm = mechanism === "arm";
 
 	if (m.constantOutput) {
 		return "Your output is the same every call, so the controller isn't reacting to the sensor.";
@@ -105,22 +108,26 @@ export function coachFor(level: Level, m: Metrics, run: RunResult): string {
 	if (m.growing) {
 		return "Each swing is bigger than the last. A gain is too high, so the loop is unstable.";
 	}
-	if (m.finalAngle > 110 && m.finalTarget < 100) {
+	if (arm && m.finalValue > 110 && m.finalTarget < 100) {
 		return "It shot past the target and fell over the top. Push less.";
 	}
-	if (m.minErr > 25) {
-		return "It never gets near the target. Push harder, or hold up the arm's weight.";
+	if (m.minErr > (arm ? 25 : 1000)) {
+		return arm
+			? "It never gets near the target. Push harder, or hold up the arm's weight."
+			: "The flywheel never gets near the target speed. Push harder.";
 	}
 	if (m.saturatedS > 1) {
 		return `The motor was maxed out for ${m.saturatedS.toFixed(1)} s straight, so the controller had no room to react.`;
 	}
-	if (m.overshoot > 5) {
-		return `It swings ${deg(m.overshoot)} past the target. Brake on the way in.`;
+	if (m.overshoot > (arm ? 5 : 150)) {
+		return arm
+			? `It swings ${format(m.overshoot)} past the target. Brake on the way in.`
+			: `It spins ${format(m.overshoot)} past the target speed.`;
 	}
-	if (m.settleErr > 1) {
-		return m.finalAngle < m.finalTarget
-			? `It settles ${deg(m.settleErr)} below the target.`
-			: `It settles ${deg(m.settleErr)} above the target.`;
+	if (m.settleErr > (arm ? 1 : 20)) {
+		return m.finalValue < m.finalTarget
+			? `It settles ${format(m.settleErr)} below the target.`
+			: `It settles ${format(m.settleErr)} above the target.`;
 	}
 	return "Close. Check the hint and run it again.";
 }

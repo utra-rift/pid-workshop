@@ -4,9 +4,10 @@
 /** What students #include. Shown read-only in the editor. */
 export const ROBOT_H = `#pragma once
 
-// The robot calls your controller 200 times a second.
-// angle and target are in degrees, dt is in seconds. Return motor volts.
-extern "C" double controller(double angle, double target, double dt);
+// The robot calls your controller 200 times a second with the sensor reading
+// and the target: degrees for the arm, RPM for the flywheel. dt is in seconds.
+// Return motor volts.
+extern "C" double controller(double measured, double target, double dt);
 
 // Adds a line called \`name\` to the response graph.
 extern "C" __attribute__((import_module("robot"), import_name("plot")))

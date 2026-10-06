@@ -1,3 +1,5 @@
+import type { Metrics } from "#/sim/metrics";
+import { formatRpm } from "#/sim/robot";
 import type { Variant } from "#/sim/types";
 import { code, type Level } from "./types";
 
@@ -18,7 +20,24 @@ const SEQUENCE_VARIANTS: Variant[] = [
 	{ name: "Heavier arm", target: 60, weight: 1.3, seed: 2 },
 ];
 
+const FLYWHEEL_VARIANTS: Variant[] = [
+	{ name: "6,000 RPM", target: 6000, seed: 1 },
+	{ name: "4,000 RPM", target: 4000, seed: 2 },
+	{ name: "7,500 RPM", target: 7500, seed: 3 },
+];
+
 const deg = (x: number) => `${x.toFixed(1)}°`;
+const rpm = (x: number) => `${formatRpm(x)} RPM`;
+
+/** The shot furthest from the target speed: 1-based, and how far off. Positive is slow. */
+function worstShot(m: Metrics): { n: number; err: number } | null {
+	let worst: { n: number; err: number } | null = null;
+	for (const [i, err] of m.shotErrors.entries()) {
+		if (!worst || Math.abs(err) > Math.abs(worst.err))
+			worst = { n: i + 1, err };
+	}
+	return worst;
+}
 
 // ---------------------------------------------------------------------------
 // Code for each level. Solution N is the starting point for level N+1.
@@ -136,7 +155,7 @@ const S = {
 			}
 		`,
 	},
-	piece: {
+	reload: {
 		python: code`
 			import math
 
@@ -403,6 +422,104 @@ const STICKY = {
 };
 
 // ---------------------------------------------------------------------------
+// The flywheel. Same idea: solution N is the starting point for level N+1.
+// ---------------------------------------------------------------------------
+
+const F = {
+	spinUp: {
+		python: code`
+			# kP: volts for each RPM the wheel is off.
+			kP = 0.002
+			# kV: volts for each RPM of speed.
+			kV = 0.0025
+
+
+			def controller(speed, target, dt):
+			    error = target - speed  # how far off the wheel is, in RPM
+			    feedforward = kV * target  # volts that hold this speed
+			    return feedforward + kP * error
+		`,
+		cpp: code`
+			#include "robot.h"
+
+			// kP: volts for each RPM the wheel is off.
+			const double kP = 0.002;
+			// kV: volts for each RPM of speed.
+			const double kV = 0.0025;
+
+			double controller(double speed, double target, double dt) {
+			  double error = target - speed;  // how far off the wheel is, in RPM
+			  double feedforward = kV * target;  // volts that hold this speed
+			  return feedforward + kP * error;
+			}
+		`,
+	},
+	rapidFire: {
+		python: code`
+			# kP: volts for each RPM the wheel is off.
+			kP = 0.02
+			# kV: volts for each RPM of speed.
+			kV = 0.0025
+
+
+			def controller(speed, target, dt):
+			    error = target - speed  # how far off the wheel is, in RPM
+			    feedforward = kV * target  # volts that hold this speed
+			    return feedforward + kP * error
+		`,
+		cpp: code`
+			#include "robot.h"
+
+			// kP: volts for each RPM the wheel is off.
+			const double kP = 0.02;
+			// kV: volts for each RPM of speed.
+			const double kV = 0.0025;
+
+			double controller(double speed, double target, double dt) {
+			  double error = target - speed;  // how far off the wheel is, in RPM
+			  double feedforward = kV * target;  // volts that hold this speed
+			  return feedforward + kP * error;
+			}
+		`,
+	},
+	worn: {
+		python: code`
+			from robot import clamp
+
+			kP = 0.02
+			kI = 0.1
+			kV = 0.0025
+
+			integral = 0.0
+
+
+			def controller(speed, target, dt):
+			    global integral
+			    error = target - speed
+			    integral = clamp(integral + error * dt, -20, 20)  # at most 2 V
+			    feedforward = kV * target
+			    return feedforward + kP * error + kI * integral
+		`,
+		cpp: code`
+			#include "robot.h"
+
+			const double kP = 0.02;
+			const double kI = 0.1;
+			const double kV = 0.0025;
+
+			double integral = 0;
+
+			double controller(double speed, double target, double dt) {
+			  double error = target - speed;
+			  integral = clamp(integral + error * dt, -20, 20);  // at most 2 V
+			  double feedforward = kV * target;
+			  return feedforward + kP * error + kI * integral;
+			}
+		`,
+	},
+};
+
+// ---------------------------------------------------------------------------
 // The levels.
 // ---------------------------------------------------------------------------
 
@@ -426,7 +543,7 @@ export const LEVELS: Level[] = [
 			},
 		],
 		why: "That's a controller: read the sensor, compare it with the target, set the motor, again and again. Look at the motor line on the graph, though. It flips between 6 V and nothing the whole time.",
-		spec: { env: {}, durationS: 6 },
+		spec: { mechanism: "arm", env: {}, durationS: 6 },
 		variants: ARM_VARIANTS,
 		starter: {
 			python: code`
@@ -472,7 +589,7 @@ export const LEVELS: Level[] = [
 		],
 		pass: (m) => m.settleErr < 10,
 		coach: (m) => {
-			if (m.finalAngle > 110) {
+			if (m.finalValue > 110) {
 				return "It shot past the target and fell over the top. That's far more push than this arm needs. Try 6 V.";
 			}
 			return null;
@@ -490,7 +607,7 @@ export const LEVELS: Level[] = [
 			"Try `kP = 0.5`. If it stops too far below the line, raise kP.",
 		],
 		why: "That's proportional control, the P in PID. It never quite reaches the line, though, and with a big kP it swings past. The next two levels fix both.",
-		spec: { env: {}, durationS: 6 },
+		spec: { mechanism: "arm", env: {}, durationS: 6 },
 		variants: ARM_VARIANTS,
 		starter: {
 			python: code`
@@ -533,7 +650,7 @@ export const LEVELS: Level[] = [
 			if (m.jitter >= 0.1) {
 				return `The motor is still buzzing: it changes by ${m.jitter.toFixed(2)} V every tick on average. Use a push that shrinks smoothly as the error shrinks.`;
 			}
-			if (m.settleErr >= 10 && m.finalAngle < m.finalTarget) {
+			if (m.settleErr >= 10 && m.finalValue < m.finalTarget) {
 				return `It stops ${deg(m.settleErr)} short of the target. Raise kP so it pushes harder.`;
 			}
 			return null;
@@ -555,7 +672,7 @@ export const LEVELS: Level[] = [
 			"Try `kD = 0.08`. More kD brakes harder.",
 		],
 		why: "That's the D in PID. It reacts to how fast the error is changing and pushes back before the arm arrives.",
-		spec: { env: {}, durationS: 6 },
+		spec: { mechanism: "arm", env: {}, durationS: 6 },
 		variants: ARM_VARIANTS,
 		starter: {
 			python: code`
@@ -630,7 +747,7 @@ export const LEVELS: Level[] = [
 			"Try `kG = 4`. If it settles above the line, kG is too big.",
 		],
 		why: "That's feedforward. You predicted the push the arm needs instead of waiting for an error to build up.",
-		spec: { env: {}, durationS: 6 },
+		spec: { mechanism: "arm", env: {}, durationS: 6 },
 		variants: ARM_VARIANTS,
 		starter: {
 			python: code`
@@ -695,17 +812,17 @@ export const LEVELS: Level[] = [
 		pass: (m) => m.settleErr < 1 && m.overshoot < 5,
 		coach: (m) => {
 			if (m.settleErr < 1) return null;
-			return m.finalAngle < m.finalTarget
+			return m.finalValue < m.finalTarget
 				? `It settles ${deg(m.settleErr)} below the target. Add \`kG * cos(angle)\` so the motor holds the weight, and make sure cos gets radians.`
 				: `It settles ${deg(m.settleErr)} above the target. kG is too big, or cos isn't getting radians.`;
 		},
 	},
 	{
-		id: "05-game-piece",
+		id: "05-reload",
 		number: 5,
-		title: "Game piece",
+		title: "Reload",
 		story:
-			"The arm is holding at the target. At 2 seconds it grabs a game piece and gets twice as heavy. Your kG doesn't know about the piece.",
+			"The arm is holding at the target. At 2 seconds its hopper is refilled with projectiles, and it gets twice as heavy. Your kG doesn't know about the extra weight.",
 		goal: "Get back within **0.5°** of the target.",
 		hints: [
 			"`integral += error * dt` adds up the error over time. An error that won't go away keeps growing the integral, and `kI * integral` keeps pushing harder until the arm gets there.",
@@ -713,7 +830,8 @@ export const LEVELS: Level[] = [
 		],
 		why: "That's the I in PID. Feedforward handles what you can predict, and the integral cleans up what you can't.",
 		spec: {
-			env: { startAtTarget: true, gamePiece: { t: 2, weight: 2 } },
+			mechanism: "arm",
+			env: { startAtTarget: true, reload: { t: 2, weight: 2 } },
 			durationS: 6,
 		},
 		variants: ARM_VARIANTS,
@@ -761,12 +879,12 @@ export const LEVELS: Level[] = [
 				}
 			`,
 		},
-		solution: S.piece,
-		wrongAnswers: [{ name: "no integral", code: S.sag, expect: /game piece/ }],
+		solution: S.reload,
+		wrongAnswers: [{ name: "no integral", code: S.sag, expect: /hopper/ }],
 		pass: (m) => m.settleErr < 0.5,
 		coach: (m) => {
-			if (m.settleErr >= 0.5 && m.finalAngle < m.finalTarget) {
-				return `The game piece drags it ${deg(m.settleErr)} below the target. kG can't know about the piece, but an integral can: it keeps growing until the arm gets there.`;
+			if (m.settleErr >= 0.5 && m.finalValue < m.finalTarget) {
+				return `The full hopper drags it ${deg(m.settleErr)} below the target. kG can't know about the extra weight, but an integral can: it keeps growing until the arm gets there.`;
 			}
 			return null;
 		},
@@ -791,10 +909,14 @@ export const LEVELS: Level[] = [
 			},
 		],
 		why: "That's integral windup. Every PID controller on a real robot limits its integral.",
-		spec: { env: { latch: { untilS: 3, maxAngle: 20 } }, durationS: 7 },
+		spec: {
+			mechanism: "arm",
+			env: { latch: { untilS: 3, maxAngle: 20 } },
+			durationS: 7,
+		},
 		variants: ARM_VARIANTS,
 		starter: {
-			python: S.piece.python
+			python: S.reload.python
 				.replace(
 					"import math\n",
 					"import math\nfrom robot import plot, clamp\n",
@@ -803,7 +925,7 @@ export const LEVELS: Level[] = [
 					"    integral += error * dt  # error added up over time\n",
 					'    integral += error * dt\n    # TODO: stop the integral from growing forever.\n    #       See it first: plot("integral", integral)\n',
 				),
-			cpp: S.piece.cpp.replace(
+			cpp: S.reload.cpp.replace(
 				"  integral += error * dt;  // error added up over time\n",
 				'  integral += error * dt;\n  // TODO: stop the integral from growing forever.\n  //       See it first: plot("integral", integral);\n',
 			),
@@ -812,7 +934,7 @@ export const LEVELS: Level[] = [
 		wrongAnswers: [
 			{
 				name: "unclamped integral",
-				code: S.piece,
+				code: S.reload,
 				expect: /when the latch let go/,
 			},
 		],
@@ -829,8 +951,257 @@ export const LEVELS: Level[] = [
 		},
 	},
 	{
-		id: "07-noisy-encoder",
+		id: "07-spin-up",
 		number: 7,
+		title: "Spin up",
+		story:
+			"New mechanism: the launcher's flywheel. Its speed sets how hard projectiles fly, so it has to hold a target speed, in RPM. At full power, 24 V, it tops out at 9,600 RPM.",
+		goal: "Settle within **20 RPM** of the target speed.",
+		hints: [
+			"Run it first. kP only pushes when the wheel is slow, but a spinning wheel needs volts all the time just to beat its own drag. So it settles wherever kP's push just about holds it, far short of the target.",
+			"The volts it needs grow with the speed. 24 V holds 9,600 RPM, so each RPM takes 24 / 9600 = 0.0025 V. Set `kV = 0.0025` and `feedforward = kV * target`.",
+		],
+		why: "That's velocity feedforward. On a flywheel, kV does almost all the work, and kP only trims what's left.",
+		spec: {
+			mechanism: "flywheel",
+			env: { noise: { tick: 0, amplitude: 15 } },
+			durationS: 4,
+		},
+		variants: FLYWHEEL_VARIANTS,
+		starter: {
+			python: code`
+				# The flywheel calls this 200 times a second too.
+				# speed and target are in RPM (revolutions per minute). Return volts, -24 to 24.
+
+				# kP: volts for each RPM the wheel is off.
+				kP = 0.002
+				# kV: volts for each RPM of speed.
+				kV = 0.0  # TODO: pick a value
+
+
+				def controller(speed, target, dt):
+				    error = target - speed  # how far off the wheel is, in RPM
+				    # TODO: the volts that hold the target speed on their own.
+				    feedforward = 0
+				    return feedforward + kP * error
+			`,
+			cpp: code`
+				#include "robot.h"
+
+				// The flywheel calls this 200 times a second too.
+				// speed and target are in RPM (revolutions per minute). Return volts, -24 to 24.
+
+				// kP: volts for each RPM the wheel is off.
+				const double kP = 0.002;
+				// kV: volts for each RPM of speed.
+				const double kV = 0.0;  // TODO: pick a value
+
+				double controller(double speed, double target, double dt) {
+				  double error = target - speed;  // how far off the wheel is, in RPM
+				  // TODO: the volts that hold the target speed on their own.
+				  double feedforward = 0;
+				  return feedforward + kP * error;
+				}
+			`,
+		},
+		solution: F.spinUp,
+		wrongAnswers: [
+			{
+				name: "P only, turned up",
+				code: {
+					python: F.spinUp.python
+						.replace("kP = 0.002", "kP = 0.3")
+						.replace("kV = 0.0025", "kV = 0.0"),
+					cpp: F.spinUp.cpp
+						.replace("kP = 0.002", "kP = 0.3")
+						.replace("kV = 0.0025", "kV = 0.0"),
+				},
+				expect: /only pushes when/,
+			},
+			{
+				name: "same volts at every speed",
+				code: {
+					python: F.spinUp.python.replace(
+						"feedforward = kV * target ",
+						"feedforward = 15 ",
+					),
+					cpp: F.spinUp.cpp.replace(
+						"feedforward = kV * target;",
+						"feedforward = 15;",
+					),
+				},
+				expect: /grow with the speed/,
+			},
+		],
+		pass: (m) => m.settleErr < 20,
+		coach: (m) => {
+			if (m.settleErr < 20) return null;
+			return m.finalValue < m.finalTarget
+				? `It holds ${rpm(m.settleErr)} below the target. kP only pushes when there's an error, and a spinning wheel needs volts just to keep going. Add a push that comes from the target speed, not the error.`
+				: `It settles ${rpm(m.settleErr)} above the target. The volts that hold a speed grow with the speed, so use kV times the target.`;
+		},
+	},
+	{
+		id: "08-rapid-fire",
+		number: 8,
+		title: "Rapid fire",
+		story:
+			"The feeder pushes a projectile through the wheels five times a second, and each one costs the wheel 400 RPM. A slow wheel throws a short shot.",
+		goal: "Every shot leaves within **50 RPM** of the target speed.",
+		hints: [
+			"Feedforward holds the speed, but it doesn't push any harder when a shot slows the wheel down. kP does, and a bigger kP wins the speed back faster.",
+			"Try `kP = 0.02`.",
+		],
+		why: "Feedforward holds the speed, and feedback wins it back after every shot. That's a launcher controller.",
+		spec: {
+			mechanism: "flywheel",
+			env: {
+				noise: { tick: 0, amplitude: 15 },
+				shots: {
+					startS: 1.5,
+					everyS: 0.2,
+					count: 10,
+					loss: 400,
+					tolerance: 50,
+				},
+			},
+			durationS: 4.5,
+		},
+		variants: [
+			{ name: "6,000 RPM", target: 6000, seed: 1 },
+			{ name: "4,500 RPM", target: 4500, seed: 2 },
+			{ name: "7,500 RPM", target: 7500, seed: 3 },
+		],
+		starter: {
+			python: F.spinUp.python.replace(
+				"kP = 0.002\n",
+				"kP = 0.002  # TODO: recover faster?\n",
+			),
+			cpp: F.spinUp.cpp.replace(
+				"kP = 0.002;\n",
+				"kP = 0.002;  // TODO: recover faster?\n",
+			),
+		},
+		solution: F.rapidFire,
+		wrongAnswers: [
+			{ name: "gentle kP", code: F.spinUp, expect: /falls short/ },
+		],
+		pass: (m) => m.shotErr < 50,
+		coach: (m) => {
+			const worst = worstShot(m);
+			if (!worst || Math.abs(worst.err) < 50) return null;
+			return worst.err > 0
+				? `Shot ${worst.n} left ${rpm(worst.err)} slow, so it falls short. Each projectile costs the wheel 400 RPM, and feedforward alone is slow to win it back. Push harder while the wheel is slow.`
+				: `Shot ${worst.n} left ${rpm(-worst.err)} fast, so it flies long.`;
+		},
+	},
+	{
+		id: "09-worn-wheels",
+		number: 9,
+		title: "Worn wheels",
+		story:
+			"Launcher wheels wear down over a competition, and worn ones drag more, so kV's volts aren't enough. One of these launchers has new wheels and two have worn ones. The feeder fires once a second from 2 s.",
+		goal: "Every shot leaves within **25 RPM** of the target, and the wheel never spins more than **150 RPM** over.",
+		hints: [
+			{
+				python:
+					"Add up the error over time with `integral += error * dt`, and add `kI * integral` to the output. It keeps growing until the wheel is at speed, however worn the wheels are. Write `global integral` inside the function.",
+				cpp: "Add up the error over time with `integral += error * dt;`, and add `kI * integral` to the output. It keeps growing until the wheel is at speed, however worn the wheels are.",
+			},
+			{
+				python:
+					"While the wheel spins up the error is thousands of RPM, so the integral piles up and the wheel flies past. Limit it like in level 6: `integral = clamp(integral + error * dt, -20, 20)` with `kI = 0.1`.",
+				cpp: "While the wheel spins up the error is thousands of RPM, so the integral piles up and the wheel flies past. Limit it like in level 6: `integral = clamp(integral + error * dt, -20, 20);` with `kI = 0.1`.",
+			},
+		],
+		why: "That's a full flywheel controller: feedforward for the speed you want, P to win it back after a shot, and a limited I for what you can't measure.",
+		spec: {
+			mechanism: "flywheel",
+			env: {
+				noise: { tick: 0, amplitude: 15 },
+				shots: { startS: 2, everyS: 1, count: 3, loss: 400, tolerance: 25 },
+			},
+			durationS: 4.5,
+		},
+		variants: [
+			{ name: "Worn wheels", target: 6000, drag: 1.1, seed: 1 },
+			{ name: "New wheels", target: 6000, seed: 2 },
+			{ name: "Worn wheels at 5,000 RPM", target: 5000, drag: 1.1, seed: 3 },
+		],
+		starter: {
+			python: code`
+				from robot import clamp
+
+				kP = 0.02
+				kI = 0.0  # TODO: pick a value
+				kV = 0.0025
+
+				integral = 0.0
+
+
+				def controller(speed, target, dt):
+				    global integral
+				    error = target - speed
+				    # TODO: add up the error in integral, and limit it.
+				    feedforward = kV * target
+				    return feedforward + kP * error + kI * integral
+			`,
+			cpp: code`
+				#include "robot.h"
+
+				const double kP = 0.02;
+				const double kI = 0.0;  // TODO: pick a value
+				const double kV = 0.0025;
+
+				double integral = 0;
+
+				double controller(double speed, double target, double dt) {
+				  double error = target - speed;
+				  // TODO: add up the error in integral, and limit it.
+				  double feedforward = kV * target;
+				  return feedforward + kP * error + kI * integral;
+				}
+			`,
+		},
+		solution: F.worn,
+		wrongAnswers: [
+			{ name: "no integral", code: F.rapidFire, expect: /drag more/ },
+			{
+				name: "unlimited integral",
+				code: {
+					python: F.worn.python.replace(
+						"integral = clamp(integral + error * dt, -20, 20)  # at most 2 V",
+						"integral += error * dt",
+					),
+					cpp: F.worn.cpp.replace(
+						"integral = clamp(integral + error * dt, -20, 20);  // at most 2 V",
+						"integral += error * dt;",
+					),
+				},
+				expect: /spinning up/,
+			},
+		],
+		pass: (m) => m.shotErr < 25 && m.overshoot < 150,
+		coach: (m, run) => {
+			if (m.overshoot >= 150) {
+				const integral = run.plots.integral?.filter(
+					(v): v is number => v !== null,
+				);
+				const peak = integral?.length
+					? Math.max(...integral.map(Math.abs))
+					: null;
+				return `It spun ${rpm(m.overshoot)} past the target. The integral kept adding up the whole time the wheel was spinning up.${peak !== null ? ` It reached ${peak.toFixed(0)}.` : ""} Limit it, like in level 6.`;
+			}
+			const worst = worstShot(m);
+			if (!worst || Math.abs(worst.err) < 25) return null;
+			return worst.err > 0
+				? `Shot ${worst.n} left ${rpm(worst.err)} slow. Worn wheels drag more than kV expects, and kP's push fades before it closes the gap. An integral keeps growing until it does.`
+				: `Shot ${worst.n} left ${rpm(-worst.err)} fast. The integral is pushing too hard: lower kI or limit it more.`;
+		},
+	},
+	{
+		id: "10-noisy-encoder",
+		number: 10,
 		title: "Noisy encoder",
 		stretch: true,
 		story:
@@ -841,7 +1212,11 @@ export const LEVELS: Level[] = [
 			"`filtered = 0.9 * filtered + 0.1 * derivative`, then use `kD * filtered`.",
 		],
 		why: "That's a low-pass filter. Real controllers filter the derivative or keep kD small for exactly this reason.",
-		spec: { env: { noise: { tick: 0.2, amplitude: 0.3 } }, durationS: 6 },
+		spec: {
+			mechanism: "arm",
+			env: { noise: { tick: 0.2, amplitude: 0.3 } },
+			durationS: 6,
+		},
 		variants: ARM_VARIANTS,
 		starter: {
 			python: S.windup.python
@@ -879,8 +1254,8 @@ export const LEVELS: Level[] = [
 		},
 	},
 	{
-		id: "08-brownout",
-		number: 8,
+		id: "11-brownout",
+		number: 11,
 		title: "Brownout",
 		stretch: true,
 		story:
@@ -896,6 +1271,7 @@ export const LEVELS: Level[] = [
 		],
 		why: "That's a motion profile. It plans the move so PID only ever sees a small error, and the motor never has to slam.",
 		spec: {
+			mechanism: "arm",
 			env: { brownout: { threshold: 16, holdS: 0.15, sagged: 12 } },
 			durationS: 6,
 		},
@@ -922,12 +1298,12 @@ export const LEVELS: Level[] = [
 		},
 	},
 	{
-		id: "09-defense",
-		number: 9,
-		title: "Playing defense",
+		id: "12-taking-hits",
+		number: 12,
+		title: "Taking hits",
 		stretch: true,
 		story:
-			"A defender rams the arm every 1.5 seconds. Feedforward can't see it coming.",
+			"An enemy robot keeps ramming yours, shoving the arm every 1.5 seconds. Feedforward can't see the hits coming.",
 		goal: "In the last 3 seconds, never get knocked more than **5.5°** off target.",
 		hints: [
 			"This one is all feedback. A bigger kP shoves back harder.",
@@ -935,7 +1311,8 @@ export const LEVELS: Level[] = [
 		],
 		why: "Fighting off pushes you can't predict is the reason to close the loop at all.",
 		spec: {
-			env: { defense: { startS: 1.5, everyS: 1.5, widthS: 0.1, volts: 12 } },
+			mechanism: "arm",
+			env: { hits: { startS: 1.5, everyS: 1.5, widthS: 0.1, volts: 12 } },
 			durationS: 8,
 		},
 		variants: ARM_VARIANTS,
@@ -964,8 +1341,8 @@ export const LEVELS: Level[] = [
 		},
 	},
 	{
-		id: "10-sticky-gearbox",
-		number: 10,
+		id: "13-sticky-gearbox",
+		number: 13,
 		title: "Sticky gearbox",
 		stretch: true,
 		story:
@@ -980,7 +1357,7 @@ export const LEVELS: Level[] = [
 			},
 		],
 		why: "kS does for friction what kG does for gravity.",
-		spec: { env: { stiction: 4 }, durationS: 6 },
+		spec: { mechanism: "arm", env: { stiction: 4 }, durationS: 6 },
 		variants: ARM_VARIANTS,
 		starter: {
 			python: STIFF.python
@@ -1013,26 +1390,27 @@ export const LEVELS: Level[] = [
 		},
 	},
 	{
-		id: "11-match",
-		number: 11,
+		id: "14-match",
+		number: 14,
 		title: "Match",
 		stretch: true,
 		story:
-			"Score, stow, score high, then grab a game piece, on a battery that browns out above 20 V. Everything from the earlier levels, in one match.",
+			"Three positions, called one after another, then a hopper refill, on a battery that browns out above 20 V. Everything from the arm levels, in one match.",
 		goal: "Reach each position within **3°** before the next one is called, settle within **1°** at the end, and never brown out.",
 		hints: [
-			"Start from your best controller. Everything you need is in levels 4 to 8.",
-			"The profile keeps the battery happy and the integral handles the game piece. If a position is missed, check that max speed is fast enough to get there in time.",
+			"Start from your best arm controller. Everything you need is in levels 4 to 6 and 10 to 13.",
+			"The profile keeps the battery happy and the integral handles the refill. If a position is missed, check that max speed is fast enough to get there in time.",
 		],
 		why: "That's a full arm controller: a motion profile, feedforward and PID. It's the same structure you'd write for the robot.",
 		spec: {
+			mechanism: "arm",
 			env: {
 				sequence: [
 					{ t: 0, angle: 60 },
 					{ t: 3, angle: 15 },
 					{ t: 6, angle: 90 },
 				],
-				gamePiece: { t: 7, weight: 1.8 },
+				reload: { t: 7, weight: 1.8 },
 				brownout: { threshold: 20, holdS: 0.15, sagged: 14 },
 			},
 			durationS: 10,
@@ -1056,6 +1434,12 @@ export const LEVELS: Level[] = [
 		},
 	},
 ];
+
+/** Which part of the course a level is in: the arm, the flywheel or the stretch levels. */
+export function sectionOf(level: Level): "Arm" | "Flywheel" | "Stretch" {
+	if (level.stretch) return "Stretch";
+	return level.spec.mechanism === "flywheel" ? "Flywheel" : "Arm";
+}
 
 export function getLevel(id: string): Level | undefined {
 	return LEVELS.find((level) => level.id === id);

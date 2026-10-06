@@ -1,13 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { Check, Lock } from "lucide-react";
 import { useEffect, useRef } from "react";
-import type { Level } from "#/levels";
+import { type Level, sectionOf } from "#/levels";
 import { cn } from "#/lib/utils";
 
 interface LevelRailProps {
 	levels: Level[];
 	currentId: string;
-	passed: Record<string, unknown>;
+	/** Passed levels, by number. */
+	passed: Record<number, unknown>;
 	isUnlocked: (level: Level) => boolean;
 }
 
@@ -31,9 +32,13 @@ export function LevelRail({
 			<ol className="flex min-w-max items-center gap-1 py-2">
 				{levels.map((level, i) => {
 					const unlocked = isUnlocked(level);
-					const done = Boolean(passed[level.id]);
+					const done = Boolean(passed[level.number]);
 					const active = level.id === currentId;
-					const firstStretch = level.stretch && !levels[i - 1]?.stretch;
+					// A label where a new section starts: the flywheel, then the stretch levels.
+					const section =
+						i > 0 && sectionOf(level) !== sectionOf(levels[i - 1])
+							? sectionOf(level)
+							: null;
 					const body = (
 						<>
 							<span
@@ -61,9 +66,9 @@ export function LevelRail({
 					);
 					return (
 						<li key={level.id} className="flex items-center">
-							{firstStretch && (
+							{section && (
 								<span className="mr-1 ml-2 border-l border-line pl-3 type-label text-[11px] text-ink-muted">
-									Stretch
+									{section}
 								</span>
 							)}
 							{unlocked ? (

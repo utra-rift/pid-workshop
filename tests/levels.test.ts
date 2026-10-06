@@ -42,7 +42,7 @@ for (const level of LEVELS) {
 			test(`${lang}: the starter doesn't pass yet`, async () => {
 				const g = summary(await run(level, lang, level.starter[lang]), level);
 				expect(g.title, g.message).not.toBe("Doesn't compile");
-				if (level.id !== "11-match") expect(g.passed, g.message).toBe(false);
+				if (level.id !== "14-match") expect(g.passed, g.message).toBe(false);
 			});
 
 			for (const wrong of level.wrongAnswers) {

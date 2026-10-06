@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "#/lib/utils";
 import { ARM } from "#/sim/arm";
+import { FLYWHEEL } from "#/sim/flywheel";
+import { formatRpm, ROBOT } from "#/sim/robot";
 import type { RunResult, SimSpec } from "#/sim/types";
 
 export const SERIES_COLORS = {
 	target: "#A897FF",
-	angle: "#4DC6E2",
+	actual: "#4DC6E2",
 	volts: "#F4FBFC",
 	grid: "#22324A",
 	axis: "#7F92AB",
@@ -52,6 +54,50 @@ interface Series {
 
 const PAD = { left: 48, right: 12, top: 8, bottom: 26 };
 
+/** How the main strip reads for each mechanism. */
+const SCALES = {
+	arm: {
+		label: "arm",
+		step: 30,
+		tick: (v: number) => `${v}°`,
+		value: (v: number) => `${v.toFixed(1)}°`,
+		target: (v: number) => `${v.toFixed(0)}°`,
+		valueWidth: 6,
+		targetWidth: 4,
+		range(lo: number, hi: number): [number, number] {
+			return [
+				Math.max(ARM.minAngle, Math.floor((Math.min(-5, lo) - 5) / 30) * 30),
+				Math.min(
+					ARM.maxAngle + 10,
+					Math.ceil((Math.max(90, hi) + 5) / 30) * 30,
+				),
+			];
+		},
+		idle: "Run your code to see how the arm moves.",
+	},
+	flywheel: {
+		label: "flywheel",
+		step: 2000,
+		tick: (v: number) => (v ? `${v / 1000}k` : "0"),
+		value: (v: number) => `${formatRpm(v)} RPM`,
+		target: (v: number) => `${formatRpm(v)} RPM`,
+		valueWidth: 10,
+		targetWidth: 9,
+		range(lo: number, hi: number): [number, number] {
+			// Before the first run, leave room for a typical target.
+			const top = Number.isFinite(hi) ? hi : FLYWHEEL.defaultTarget;
+			return [
+				Number.isFinite(lo) ? Math.min(0, Math.floor(lo / 2000) * 2000) : 0,
+				Math.min(
+					FLYWHEEL.maxRpm,
+					Math.max(2000, Math.ceil((top + 500) / 2000) * 2000),
+				),
+			];
+		},
+		idle: "Run your code to see how the flywheel spins.",
+	},
+};
+
 export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const [width, setWidth] = useState(600);
@@ -60,6 +106,7 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 	const [focus, setFocus] = useState<string | null>(null);
 	const plotNames = useMemo(() => Object.keys(run?.plots ?? {}), [run]);
 	const height = plotNames.length ? 340 : 236;
+	const scale = SCALES[spec.mechanism];
 
 	useEffect(() => {
 		const el = canvas.current?.parentElement;
@@ -73,16 +120,16 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 
 	const strips = useMemo(() => {
 		const samples = run?.samples ?? [];
-		let lo = Math.min(-5, ...samples.map((s) => Math.min(s.angle, s.target)));
-		let hi = Math.max(90, ...samples.map((s) => Math.max(s.angle, s.target)));
-		lo = Math.max(ARM.minAngle, Math.floor((lo - 5) / 30) * 30);
-		hi = Math.min(ARM.maxAngle + 10, Math.ceil((hi + 5) / 30) * 30);
+		const [lo, hi] = scale.range(
+			Math.min(...samples.map((s) => Math.min(s.actual, s.target))),
+			Math.max(...samples.map((s) => Math.max(s.actual, s.target))),
+		);
 
 		const innerH = height - PAD.top - PAD.bottom;
 		const gap = 18;
-		const angleH = plotNames.length ? innerH * 0.5 : innerH * 0.72;
-		const voltsH = plotNames.length ? innerH * 0.18 : innerH - angleH - gap;
-		const plotsH = plotNames.length ? innerH - angleH - voltsH - gap * 2 : 0;
+		const mainH = plotNames.length ? innerH * 0.5 : innerH * 0.72;
+		const voltsH = plotNames.length ? innerH * 0.18 : innerH - mainH - gap;
+		const plotsH = plotNames.length ? innerH - mainH - voltsH - gap * 2 : 0;
 
 		// Scale to the 1st-99th percentile so one spike (a derivative's first
 		// tick, say) can't flatten everything else. Outliers get clipped.
@@ -114,15 +161,15 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 		const pad = (phi - plo) * 0.1;
 
 		return {
-			angle: { top: PAD.top, height: angleH, lo, hi } as Strip,
+			main: { top: PAD.top, height: mainH, lo, hi } as Strip,
 			volts: {
-				top: PAD.top + angleH + gap,
+				top: PAD.top + mainH + gap,
 				height: voltsH,
-				lo: -ARM.maxVolts,
-				hi: ARM.maxVolts,
+				lo: -ROBOT.maxVolts,
+				hi: ROBOT.maxVolts,
 			} as Strip,
 			plots: {
-				top: PAD.top + angleH + voltsH + gap * 2,
+				top: PAD.top + mainH + voltsH + gap * 2,
 				height: plotsH,
 				lo: plo - pad,
 				hi: phi + pad,
@@ -130,7 +177,7 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 				dataHi: phi,
 			} as Strip,
 		};
-	}, [run, plotNames, height]);
+	}, [run, plotNames, height, scale]);
 
 	useEffect(() => {
 		const el = canvas.current;
@@ -166,12 +213,12 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 			ctx.fillText(label, PAD.left - 6, yy);
 		};
 		for (
-			let v = Math.ceil(strips.angle.lo / 30) * 30;
-			v <= strips.angle.hi;
-			v += 30
+			let v = Math.ceil(strips.main.lo / scale.step) * scale.step;
+			v <= strips.main.hi;
+			v += scale.step
 		)
-			gridLine(strips.angle, v, `${v}°`);
-		for (const v of [-ARM.maxVolts, 0, ARM.maxVolts])
+			gridLine(strips.main, v, scale.tick(v));
+		for (const v of [-ROBOT.maxVolts, 0, ROBOT.maxVolts])
 			gridLine(strips.volts, v, `${v}V`);
 		if (plotNames.length) {
 			const { dataLo = strips.plots.lo, dataHi = strips.plots.hi } =
@@ -196,7 +243,7 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 
 		const samples = run?.samples ?? [];
 		if (!samples.length) return;
-		const last = Math.min(samples.length - 1, Math.floor(t / ARM.controlDt));
+		const last = Math.min(samples.length - 1, Math.floor(t / ROBOT.controlDt));
 
 		const line = (
 			strip: Strip,
@@ -234,17 +281,17 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 		const series: Series[] = [
 			{
 				key: "target",
-				strip: strips.angle,
+				strip: strips.main,
 				values: samples.map((s) => s.target),
 				color: SERIES_COLORS.target,
 				width: 1.5,
 				dash: [5, 4],
 			},
 			{
-				key: "angle",
-				strip: strips.angle,
-				values: samples.map((s) => s.angle),
-				color: SERIES_COLORS.angle,
+				key: "actual",
+				strip: strips.main,
+				values: samples.map((s) => s.actual),
+				color: SERIES_COLORS.actual,
 				width: 2,
 			},
 			{
@@ -282,6 +329,17 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 		for (const event of run?.events ?? []) {
 			if (event.t > t) continue;
 			const ex = Math.round(x(event.t)) + 0.5;
+			if (event.kind === "shot") {
+				// A short tick at the top: there can be many shots.
+				ctx.strokeStyle = SHOT_COLOR;
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.moveTo(ex, PAD.top);
+				ctx.lineTo(ex, PAD.top + 7);
+				ctx.stroke();
+				ctx.lineWidth = 1;
+				continue;
+			}
 			ctx.strokeStyle = event.kind === "brownout" ? "#FF6B81" : "#4A5B73";
 			ctx.setLineDash([2, 3]);
 			ctx.beginPath();
@@ -289,7 +347,7 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 			ctx.lineTo(ex, height - PAD.bottom);
 			ctx.stroke();
 			ctx.setLineDash([]);
-			if (event.kind !== "bump" && event.kind !== "waypoint") {
+			if (event.kind !== "hit" && event.kind !== "waypoint") {
 				ctx.fillStyle =
 					event.kind === "brownout" ? "#FF6B81" : SERIES_COLORS.axis;
 				ctx.textAlign = "left";
@@ -308,13 +366,24 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 			ctx.lineTo(cx, height - PAD.bottom);
 			ctx.stroke();
 		}
-	}, [width, height, strips, run, t, spec.durationS, plotNames, hover, focus]);
+	}, [
+		width,
+		height,
+		strips,
+		scale,
+		run,
+		t,
+		spec.durationS,
+		plotNames,
+		hover,
+		focus,
+	]);
 
 	const samples = run?.samples ?? [];
 	const readoutT = hover ?? Math.min(t, spec.durationS);
 	const readoutIndex = Math.min(
 		samples.length - 1,
-		Math.floor(readoutT / ARM.controlDt),
+		Math.floor(readoutT / ROBOT.controlDt),
 	);
 	const readout = samples.length ? samples[Math.max(0, readoutIndex)] : null;
 
@@ -325,20 +394,20 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 					color={SERIES_COLORS.target}
 					dashed
 					label="target"
-					width={4}
+					width={scale.targetWidth}
 					focused={focus}
 					seriesKey="target"
 					onFocusChange={setFocus}
-					value={readout ? `${readout.target.toFixed(0)}°` : undefined}
+					value={readout ? scale.target(readout.target) : undefined}
 				/>
 				<LegendItem
-					color={SERIES_COLORS.angle}
-					label="arm"
-					width={6}
+					color={SERIES_COLORS.actual}
+					label={scale.label}
+					width={scale.valueWidth}
 					focused={focus}
-					seriesKey="angle"
+					seriesKey="actual"
 					onFocusChange={setFocus}
-					value={readout ? `${readout.angle.toFixed(1)}°` : undefined}
+					value={readout ? scale.value(readout.actual) : undefined}
 				/>
 				<LegendItem
 					color={SERIES_COLORS.volts}
@@ -376,7 +445,7 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 					ref={canvas}
 					style={{ width: "100%", height }}
 					className="block"
-					aria-label="Response graph: target, arm angle and motor volts over time"
+					aria-label={`Response graph: target, ${spec.mechanism === "arm" ? "arm angle" : "flywheel speed"} and motor volts over time`}
 					role="img"
 					onMouseMove={(event) => {
 						if (!samples.length) return;
@@ -390,7 +459,7 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 				/>
 				{!samples.length && (
 					<div className="absolute inset-0 flex items-center justify-center type-body-sm text-ink-muted">
-						Run your code to see how the arm moves.
+						{scale.idle}
 					</div>
 				)}
 			</div>
@@ -399,12 +468,15 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 }
 
 const EVENT_LABEL = {
-	piece: "PIECE",
+	reload: "RELOAD",
 	release: "RELEASE",
 	brownout: "BROWNOUT",
-	bump: "HIT",
+	hit: "HIT",
 	waypoint: "NEW TARGET",
+	shot: "SHOT",
 } as const;
+
+const SHOT_COLOR = "#FFC861";
 
 /**
  * A legend entry with its live value in a fixed-width slot, so values that
