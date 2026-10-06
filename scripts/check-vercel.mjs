@@ -10,7 +10,7 @@
 //
 //   NITRO_PRESET=vercel pnpm build && node scripts/check-vercel.mjs
 
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +39,7 @@ function headersFor(urlPath) {
 const staticDir = path.join(root, ".vercel/output/static");
 const files = readdirSync(staticDir, { recursive: true })
 	.map((file) => `/${String(file).split(path.sep).join("/")}`)
-	.filter((file) => /\.(m?js|wasm|html|css)$/.test(file));
+	.filter((file) => /\.(m?js|wasm|html|css|gz)$/.test(file));
 const missing = files.filter((file) => {
 	const h = headersFor(file);
 	return h["cross-origin-embedder-policy"] !== "require-corp" || h["cross-origin-opener-policy"] !== "same-origin";
@@ -48,6 +48,20 @@ if (missing.length) failed++;
 console.log(
 	`${missing.length ? "FAIL" : "PASS"} COOP/COEP on ${files.length - missing.length}/${files.length} static scripts, wasm and pages${missing.length ? `; missing on ${missing.slice(0, 5).join(", ")}` : ""}`,
 );
+
+// Static output size, against the hosts' limits (Cloudflare: 25 MiB per file).
+let total = 0;
+let largest = { file: "", size: 0 };
+for (const file of readdirSync(staticDir, { recursive: true })) {
+	const full = path.join(staticDir, String(file));
+	const size = statSync(full).isFile() ? statSync(full).size : 0;
+	total += size;
+	if (size > largest.size) largest = { file: String(file), size };
+}
+const mib = (n) => `${(n / 1048576).toFixed(1)} MiB`;
+const fits = largest.size <= 25 * 1048576;
+if (!fits) failed++;
+console.log(`${fits ? "PASS" : "FAIL"} static output ${mib(total)}, largest file ${largest.file} at ${mib(largest.size)}`);
 
 // 2. The server function, run from an isolated folder.
 const dir = mkdtempSync(path.join(os.tmpdir(), "learn-pid-fn-"));

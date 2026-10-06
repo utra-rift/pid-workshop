@@ -1,11 +1,6 @@
-// Where the in-browser toolchains live. Versions must match scripts/sync-tools.mjs.
+// Where the in-browser toolchains live: public/vendor, shipped with the app.
+// Versions must match scripts/sync-tools.mjs.
 
-/** The big binaries. /tools in dev (served from tools-dist/), an R2 bucket in production. */
-const TOOLS_URL = (import.meta.env.VITE_TOOLS_URL ?? "/tools").replace(
-	/\/$/,
-	"",
-);
-/** Small files that must be same-origin, shipped in public/vendor. */
 const VENDOR_URL = "/vendor";
 
 const absolute = (url: string) =>
@@ -28,17 +23,23 @@ export const TOOLS = {
 	},
 	clang: {
 		version: "22.0.0-git20542-10",
-		get bundle() {
-			return absolute(`${TOOLS_URL}/clang/22.0.0-git20542-10/bundle.js`);
+		get base() {
+			return absolute(`${VENDOR_URL}/clang/22.0.0-git20542-10`);
 		},
+		get bundle() {
+			return `${this.base}/bundle.js`;
+		},
+		/** Shipped as `<name>.gz`; the compiler worker inflates them as they load. */
+		gzipped: ["llvm.core.wasm", "llvm-resources.tar"],
 	},
 	clangd: {
 		version: "21.1.0",
 		get js() {
 			return absolute(`${VENDOR_URL}/clangd/21.1.0/clangd.js`);
 		},
-		get wasm() {
-			return absolute(`${TOOLS_URL}/clangd/21.1.0/clangd.wasm`);
+		/** Gzipped; the clangd worker inflates it. */
+		get wasmGz() {
+			return absolute(`${VENDOR_URL}/clangd/21.1.0/clangd.wasm.gz`);
 		},
 	},
 } as const;

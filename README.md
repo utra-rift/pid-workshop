@@ -15,14 +15,16 @@ pnpm install
 pnpm dev          # http://localhost:3000
 ```
 
-`pnpm dev` and `pnpm build` first run `scripts/sync-tools.mjs`, which copies the toolchains into place:
+`pnpm dev` and `pnpm build` first run `scripts/sync-tools.mjs`, which copies the toolchains into `public/vendor/` (gitignored), so they ship with the app:
 
-| Where | What | Size |
-|---|---|---|
-| `public/vendor/` | Pyodide, the basedpyright worker, clangd's JS glue. Shipped with the app. | 33 MB |
-| `tools-dist/` | clang (`@yowasp/clang`) and clangd's wasm. Served at `/tools` in dev; an R2 bucket in production. | 230 MB |
+| What | Size |
+|---|---|
+| Pyodide (Python runtime) | 15 MB |
+| basedpyright worker (Python language server) | 18 MB |
+| clang (`@yowasp/clang`): its 75 MB wasm and 30 MB header tar, gzipped | 26 MB |
+| clangd: its JS glue, and its 126 MB wasm gzipped | 24 MB |
 
-The first run downloads clangd (126 MB) and checks its sha256. Both folders are gitignored.
+Gzipping the three big binaries brings each one under 25 MiB, the per-file limit on Cloudflare Workers, and keeps the whole deploy around 86 MB. The compiler and clangd workers inflate them in the browser with `DecompressionStream`. The first run downloads clangd from clangd-in-browser, checks its sha256, and caches it in `node_modules/.cache`.
 
 Other scripts: `pnpm test`, `pnpm typecheck`, `pnpm check` (Biome).
 
@@ -73,25 +75,19 @@ They're set in three places: `src/start.ts` for server-rendered pages, `nitro({ 
 
 Before deploying to Vercel, run `node scripts/check-vercel.mjs`. It checks two things that broke in production:
 
-- **Headers on static files.** It replays Vercel's first-match routing from `.vercel/output/config.json` and checks that every script, wasm file and page gets COOP and COEP. Nitro's own cache rule for `/assets` matches first, so `vite.config.ts` repeats the headers on `/assets/**`. Without them, worker scripts are blocked (`blocked:COEP-framed-resource-needs-coep-header`) and Python and C++ fail with "The worker crashed."
+- **Headers on static files.** It replays Vercel's first-match routing from `.vercel/output/config.json` and checks that every script, wasm file and page gets COOP and COEP. Nitro's own cache rule for `/assets` matches first, so `vite.config.ts` repeats the headers on `/assets/**`. Without them, worker scripts are blocked (`blocked:COEP-framed-resource-needs-coep-header`) and Python and C++ fail with "The worker crashed." Browsers cache `/assets` as immutable for a year, headers included, so after the fix the worker files got a new name pattern (`worker.rolldownOptions` in `vite.config.ts`) to force fresh copies. If worker headers ever change again, change that pattern too.
 - **The server function.** It copies the built function to a temp folder, away from the project's `node_modules`, and requests a few pages, so a package missing from the function fails there instead of in production.
 
 Monaco and the language servers must stay out of the server bundle. `clientOnly()` in `vite.config.ts` replaces `src/editor/monaco.ts` and `src/editor/lsp/servers.ts` with stubs in the server build. Without it, the bundler put shared helpers in the language-server chunk, every server render loaded that chunk, and Vercel failed with `Cannot find module 'vscode-jsonrpc'`. Keep editor and language-server code behind those two modules, and import them only dynamically.
 
-The big binaries don't fit either host (Cloudflare caps static files at 25 MiB, and Vercel Hobby caps a CLI deploy at 100 MB), so they go on Cloudflare R2:
-
-1. Create a public bucket on a custom domain and upload `tools-dist/` as is, so the paths look like `clang/22.0.0-git20542-10/bundle.js` and `clangd/21.1.0/clangd.wasm`. Set `Cache-Control: public, max-age=31536000, immutable`. Brotli-compressing them first saves a lot: clang drops from 75 MB to 15 MB.
-2. Add a CORS rule that allows `GET` from the app's origins.
-3. Build with `VITE_TOOLS_URL=https://tools.example.com pnpm build`.
-
-CORS is enough. Every tools request is a CORS fetch or module import, which the security headers allow without `Cross-Origin-Resource-Policy`. To try this locally, serve `tools-dist/` from another origin with `node scripts/serve-tools.mjs 3003`, then run `VITE_TOOLS_URL=http://localhost:3003 pnpm build` and `PORT=3002 node .output/server/index.mjs`. This setup passed all the smoke tests above.
+Everything ships with the app, so there's nothing else to host. The largest file is clangd's gzipped wasm at 23.9 MiB.
 
 Download sizes per student: Python is about 10 MB. C++ is about 45 MB compressed: clang 19 MB, clangd 25 MB. Ask students to open the site and pick their language before the workshop, on good wifi.
 
 ## Open TODOs
 
 - **clangd binary.** `sync-tools.mjs` downloads the clangd 21.1.0 build published by [clangd-in-browser](https://github.com/Guyutongxue/clangd-in-browser) (MIT), pinned by sha256. For production, build our own with `scripts/clangd/build.sh`, adapted from theirs. The script hasn't been run here; it takes an hour or more.
-- **Offline.** Picking a language warms the browser's HTTP cache. A service worker that caches `/tools` and `/vendor` would make the site survive a dead venue network.
+- **Offline.** Picking a language warms the browser's HTTP cache. A service worker that caches `/vendor` would make the site survive a dead venue network.
 - **Deploy target.** Running on Vercel. For Cloudflare Workers, try the preset and check that the headers from `routeRules` reach static files there.
 - **Browsers.** Tested in Chromium. Check Safari 15.2+ and Firefox, and C++ on the weakest Chromebook you have: clangd reserves 2 GB of memory.
 - **Fonts.** The Widescreen files come from rift-web and are trial versions. The licence TODO from rift-web applies here too.

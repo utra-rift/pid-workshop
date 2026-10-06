@@ -8,7 +8,7 @@ import {
 	BrowserMessageWriter,
 } from "vscode-languageserver-protocol/browser";
 import { CLANGD_FLAGS, PRELUDE_H, ROBOT_H } from "#/runtimes/cpp/files";
-import { emit, fetchBytes } from "#/runtimes/rpc";
+import { emit, fetchBytes, inflateBytes } from "#/runtimes/rpc";
 import { TOOLS } from "#/tools";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -64,10 +64,14 @@ class LspFramer {
 }
 
 async function start(port: MessagePort) {
-	const wasm = await fetchBytes(
-		TOOLS.clangd.wasm,
-		"C++ language server",
-		(loaded, total, label) => emit({ type: "progress", loaded, total, label }),
+	// Shipped gzipped (25 MB instead of 126 MB); progress counts the download.
+	const wasm = await inflateBytes(
+		await fetchBytes(
+			TOOLS.clangd.wasmGz,
+			"C++ language server",
+			(loaded, total, label) =>
+				emit({ type: "progress", loaded, total, label }),
+		),
 	);
 	const wasmUrl = URL.createObjectURL(
 		new Blob([wasm as BlobPart], { type: "application/wasm" }),

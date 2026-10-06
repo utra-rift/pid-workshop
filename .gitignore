@@ -9,8 +9,6 @@ dist-ssr
 .wrangler
 .output
 .vercel
-# Toolchain binaries copied by `pnpm tools`. Production serves them from R2.
-tools-dist
 public/vendor
 scripts/clangd/.build
 scripts/clangd/out

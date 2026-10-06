@@ -164,3 +164,45 @@ export async function fetchBytes(
 	}
 	return bytes;
 }
+
+/**
+ * Inflates a gzipped stream. The big toolchain files ship as .gz; a server that
+ * sends them with Content-Encoding: gzip has already inflated them, so this
+ * checks the gzip magic bytes first and passes plain data through.
+ */
+export async function inflate(
+	body: ReadableStream<Uint8Array>,
+): Promise<ReadableStream<Uint8Array>> {
+	const reader = body.getReader();
+	const first = await reader.read();
+	const rest = new ReadableStream<Uint8Array>({
+		start(controller) {
+			if (!first.done) controller.enqueue(first.value);
+		},
+		async pull(controller) {
+			const { done, value } = await reader.read();
+			if (done) controller.close();
+			else controller.enqueue(value);
+		},
+		cancel(reason) {
+			return reader.cancel(reason);
+		},
+	});
+	const gzipped =
+		!first.done && first.value[0] === 0x1f && first.value[1] === 0x8b;
+	return gzipped
+		? rest.pipeThrough(
+				new DecompressionStream("gzip") as ReadableWritablePair<
+					Uint8Array,
+					Uint8Array
+				>,
+			)
+		: rest;
+}
+
+/** Inflates gzipped bytes, or returns them unchanged if they aren't gzip. */
+export async function inflateBytes(bytes: Uint8Array): Promise<Uint8Array> {
+	if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
+	const stream = await inflate(new Blob([bytes as BlobPart]).stream());
+	return new Uint8Array(await new Response(stream).arrayBuffer());
+}

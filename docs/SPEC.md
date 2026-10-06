@@ -13,7 +13,7 @@ Everything runs in the browser. Student code compiles and runs in Web Workers, M
 
 | Date | Question | Decision |
 |---|---|---|
-| 2026-10-05 | Deploy target | Vercel or Cloudflare Workers, picked later. Tool binaries go on R2 either way |
+| 2026-10-06 | Deploy target | Vercel. All tools ship with the app; the three big binaries are gzipped to fit 25 MiB per file, so no separate bucket is needed |
 | 2026-10-05 | Workshop timing | Not soon. clangd and the stretch levels are in scope |
 | 2026-10-05 | Students new to code | Keep the level design. Python is suggested to first-timers; level 1's hints show `if`/`else` syntax |
 | 2026-10-05 | Porting PID Playground's code | Not needed. Everything here is written from scratch; the site is credited |
@@ -174,12 +174,11 @@ Monaco's built-in `monaco.lsp` client sends every open file to every server, wit
 
 ### Cross-origin isolation
 
-COOP `same-origin` and COEP `require-corp` are set on every response: by TanStack Start middleware for pages, Nitro `routeRules` for static files, and Vite `server.headers` in dev. Tools on another origin only need CORS, because every request for them is a CORS fetch or a module import. This was tested with a production build loading clang and clangd from a separate CORS-only origin.
+COOP `same-origin` and COEP `require-corp` are set on every response: by TanStack Start middleware for pages, Nitro `routeRules` for static files (repeated for `/assets/**`, because Vercel stops at the first matching route), and Vite `server.headers` in dev. Worker scripts in particular won't start without COEP.
 
 ### Hosting
 
-- **App** (Nitro preset for Vercel or Cloudflare): 39 MB of static files, mostly Pyodide (15 MB) and the basedpyright worker (18 MB). Every file is under Cloudflare's 25 MiB limit.
-- **Tools** on R2: clang (75 MB wasm plus a 30 MB header and library tar) and clangd (126 MB wasm). Built with `VITE_TOOLS_URL`.
+- **Everything ships with the app** in `public/vendor/`: Pyodide (15 MB), the basedpyright worker (18 MB), clang (26 MB) and clangd (24 MB). clang's 75 MB wasm and 30 MB header tar and clangd's 126 MB wasm are stored gzipped, which puts every file under Cloudflare's 25 MiB limit. The compiler worker swaps in a `fetch` that asks for the `.gz` and inflates it as it streams; the clangd worker inflates its wasm after downloading. Both skip inflating if a server already decoded the file. The static output is about 86 MiB.
 - **Downloads per student:** Python about 10 MB compressed, C++ about 45 MB, downloaded when the student picks a language.
 
 ## Testing

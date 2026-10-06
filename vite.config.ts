@@ -1,11 +1,10 @@
-import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
-import { type Connect, defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,15 +13,6 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const ISOLATION = {
 	"Cross-Origin-Opener-Policy": "same-origin",
 	"Cross-Origin-Embedder-Policy": "require-corp",
-};
-
-const MIME: Record<string, string> = {
-	".js": "text/javascript",
-	".mjs": "text/javascript",
-	".wasm": "application/wasm",
-	".tar": "application/x-tar",
-	".zip": "application/zip",
-	".json": "application/json",
 };
 
 /**
@@ -66,46 +56,6 @@ function clientOnly(): Plugin {
 	};
 }
 
-/**
- * Serves the big toolchain binaries (clang, clangd's wasm) from tools-dist/
- * at /tools in dev and preview. They are too large for the app's static
- * assets, so production loads them from VITE_TOOLS_URL (an R2 bucket).
- */
-function serveTools(): Plugin {
-	const dir = path.join(root, "tools-dist");
-	const handler: Connect.NextHandleFunction = (req, res, next) => {
-		const url = new URL(req.url ?? "/", "http://localhost");
-		const file = path.join(dir, decodeURIComponent(url.pathname));
-		if (
-			!file.startsWith(dir) ||
-			!existsSync(file) ||
-			!statSync(file).isFile()
-		) {
-			next();
-			return;
-		}
-		res.setHeader(
-			"Content-Type",
-			MIME[path.extname(file)] ?? "application/octet-stream",
-		);
-		res.setHeader("Content-Length", statSync(file).size);
-		res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-		res.setHeader("Cache-Control", "no-cache");
-		for (const [key, value] of Object.entries(ISOLATION))
-			res.setHeader(key, value);
-		createReadStream(file).pipe(res);
-	};
-	return {
-		name: "serve-tools",
-		configureServer(server) {
-			server.middlewares.use("/tools", handler);
-		},
-		configurePreviewServer(server) {
-			server.middlewares.use("/tools", handler);
-		},
-	};
-}
-
 export default defineConfig({
 	resolve: {
 		tsconfigPaths: true,
@@ -136,10 +86,22 @@ export default defineConfig({
 	},
 	server: { headers: ISOLATION },
 	preview: { headers: ISOLATION },
-	worker: { format: "es" },
+	worker: {
+		format: "es",
+		// A new name pattern for worker files. Builds before the COEP fix served
+		// them without the header, and browsers cache /assets for a year as
+		// immutable, so a worker whose content didn't change kept its old URL and
+		// its old, blocked response. If worker headers ever change again, change
+		// this pattern too.
+		rolldownOptions: {
+			output: {
+				entryFileNames: "assets/worker-[name]-[hash].js",
+				chunkFileNames: "assets/worker-chunk-[name]-[hash].js",
+			},
+		},
+	},
 	plugins: [
 		clientOnly(),
-		serveTools(),
 		nitro({
 			routeRules: {
 				"/**": { headers: ISOLATION },
