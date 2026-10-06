@@ -69,7 +69,11 @@ They're set in three places: `src/start.ts` for server-rendered pages, `nitro({ 
 
 ## Deploy
 
-`pnpm build` produces a Nitro server in `.output/`. Pick the host with a Nitro preset, the same as rift-web: `NITRO_PRESET=vercel pnpm build`, or `cloudflare_module` for Cloudflare Workers. Only the default Node preset has been tried so far.
+`pnpm build` produces a Nitro server in `.output/`. Pick the host with a Nitro preset, the same as rift-web: `NITRO_PRESET=vercel pnpm build`, or `cloudflare_module` for Cloudflare Workers (not tried yet).
+
+Before deploying to Vercel, run `node scripts/check-vercel.mjs`. It copies the built function to a temp folder, away from the project's `node_modules`, and requests a few pages, so a package missing from the function fails there instead of in production.
+
+Monaco and the language servers must stay out of the server bundle. `clientOnly()` in `vite.config.ts` replaces `src/editor/monaco.ts` and `src/editor/lsp/servers.ts` with stubs in the server build. Without it, the bundler put shared helpers in the language-server chunk, every server render loaded that chunk, and Vercel failed with `Cannot find module 'vscode-jsonrpc'`. Keep editor and language-server code behind those two modules, and import them only dynamically.
 
 The big binaries don't fit either host (Cloudflare caps static files at 25 MiB, and Vercel Hobby caps a CLI deploy at 100 MB), so they go on Cloudflare R2:
 
@@ -85,7 +89,7 @@ Download sizes per student: Python is about 10 MB. C++ is about 45 MB compressed
 
 - **clangd binary.** `sync-tools.mjs` downloads the clangd 21.1.0 build published by [clangd-in-browser](https://github.com/Guyutongxue/clangd-in-browser) (MIT), pinned by sha256. For production, build our own with `scripts/clangd/build.sh`, adapted from theirs. The script hasn't been run here; it takes an hour or more.
 - **Offline.** Picking a language warms the browser's HTTP cache. A service worker that caches `/tools` and `/vendor` would make the site survive a dead venue network.
-- **Deploy target.** Vercel or Cloudflare Workers isn't decided. Try the preset and check that the headers from `routeRules` reach static files on that host.
+- **Deploy target.** Running on Vercel. For Cloudflare Workers, try the preset and check that the headers from `routeRules` reach static files there.
 - **Browsers.** Tested in Chromium. Check Safari 15.2+ and Firefox, and C++ on the weakest Chromebook you have: clangd reserves 2 GB of memory.
 - **Fonts.** The Widescreen files come from rift-web and are trial versions. The licence TODO from rift-web applies here too.
 - **Narrow screens.** The layout stacks below 1280 px but isn't designed for phones.

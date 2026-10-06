@@ -26,6 +26,47 @@ const MIME: Record<string, string> = {
 };
 
 /**
+ * Monaco and the language servers only ever run in the browser, and only from
+ * dynamic imports. Left in the server build, the bundler can put shared
+ * helpers in their chunk, so every server render loads it and then fails on
+ * vscode-jsonrpc, which isn't deployed with the server. On the server these
+ * two entry points become stubs, and nothing behind them gets bundled.
+ */
+const CLIENT_ONLY: Record<string, string> = {
+	[path.join(root, "src/editor/monaco.ts")]:
+		"export function loadMonaco() { throw new Error('Monaco only runs in the browser.'); }",
+	[path.join(root, "src/editor/lsp/servers.ts")]: [
+		"export { FILE_URIS, ROOT_URI } from '#/editor/uris';",
+		"export function getLanguageServer() { throw new Error('Language servers only run in the browser.'); }",
+	].join("\n"),
+};
+
+function clientOnly(): Plugin {
+	const PREFIX = "\0client-only:";
+	return {
+		name: "client-only-modules",
+		enforce: "pre",
+		async resolveId(source, importer, options) {
+			if (this.environment?.config.consumer !== "server") return null;
+			if (!source.includes("editor/monaco") && !source.includes("lsp/servers"))
+				return null;
+			const resolved = await this.resolve(source, importer, {
+				...options,
+				skipSelf: true,
+			});
+			return resolved && resolved.id in CLIENT_ONLY
+				? PREFIX + resolved.id
+				: null;
+		},
+		load(id) {
+			return id.startsWith(PREFIX)
+				? CLIENT_ONLY[id.slice(PREFIX.length)]
+				: null;
+		},
+	};
+}
+
+/**
  * Serves the big toolchain binaries (clang, clangd's wasm) from tools-dist/
  * at /tools in dev and preview. They are too large for the app's static
  * assets, so production loads them from VITE_TOOLS_URL (an R2 bucket).
@@ -97,6 +138,7 @@ export default defineConfig({
 	preview: { headers: ISOLATION },
 	worker: { format: "es" },
 	plugins: [
+		clientOnly(),
 		serveTools(),
 		nitro({ routeRules: { "/**": { headers: ISOLATION } } }),
 		tailwindcss(),
