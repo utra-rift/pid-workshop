@@ -1,0 +1,95 @@
+/*
+ * RIFT design tokens (from the design handoff: design/tokens.css).
+ * Colour, shadow and spacing tokens live here. Font stacks and radii are
+ * declared in the Tailwind @theme in src/styles.css so they also become utilities.
+ *
+ * Tokens are re-declared on any [data-theme] element, so a subtree can switch
+ * theme independently of <html>.
+ */
+
+:root,
+[data-theme="light"] {
+	--ice: #f4fbfc;
+	--navy: #002554;
+	--cyan: #4dc6e2;
+	--violet: #7b61ff;
+	--surface: var(--ice);
+	--surface-raised: #ffffff;
+	--surface-brand: var(--navy);
+	--line: #d3e4ea;
+	--ink: var(--navy);
+	--ink-muted: #4a5b73;
+	--on-navy: #f4fbfc;
+	--on-cyan: #002554;
+	--on-violet: #ffffff;
+	--cyan-text: #006e88;
+	--cyan-soft: #e4f6fa;
+	--violet-text: #5a3fe0;
+	--violet-soft: #eeeaff;
+	--focus: var(--violet);
+	--link: var(--cyan-text);
+	--shadow-card: 0 1px 2px rgba(0, 37, 84, 0.08);
+	--glow-spark: 0 0 26px rgba(77, 198, 226, 0.45);
+
+	/* The primary button is navy on light grounds. */
+	--button-primary: var(--navy);
+	--button-primary-ink: var(--on-navy);
+}
+
+[data-theme="dark"] {
+	--surface: #07101f;
+	--surface-raised: #0e1a2e;
+	--surface-brand: #002554;
+	--line: #22324a;
+	--ink: #f4fbfc;
+	--ink-muted: #9fb0c6;
+	--cyan-text: #4dc6e2;
+	--cyan-soft: #0d2a38;
+	--violet-text: #a897ff;
+	--violet-soft: #1c1640;
+	--focus: var(--violet);
+	--link: var(--cyan-text);
+	--shadow-card: none;
+	--glow-spark: 0 0 26px rgba(255, 255, 255, 0.35);
+
+	/* Navy disappears into the arena ground, so the primary button follows ink. */
+	--button-primary: var(--ice);
+	--button-primary-ink: var(--navy);
+}
+
+:root {
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-6: 24px;
+	--space-8: 32px;
+	--space-12: 48px;
+	--space-16: 64px;
+}
+
+/* shadcn/ui semantic aliases, mapped onto the RIFT tokens. */
+:root,
+[data-theme] {
+	--background: var(--surface);
+	--foreground: var(--ink);
+	--card: var(--surface-raised);
+	--card-foreground: var(--ink);
+	--popover: var(--surface-raised);
+	--popover-foreground: var(--ink);
+	--primary: var(--button-primary);
+	--primary-foreground: var(--button-primary-ink);
+	--secondary: var(--cyan-soft);
+	--secondary-foreground: var(--ink);
+	--muted: var(--cyan-soft);
+	--muted-foreground: var(--ink-muted);
+	--accent: var(--cyan-soft);
+	--accent-foreground: var(--ink);
+	/* Not a brand colour. The brand has no error colour yet; this is a placeholder
+	   for form validation until one is defined. */
+	--destructive: #c8233c;
+	--border: var(--line);
+	/* line is decorative only, so controls get a stronger boundary. */
+	--input: var(--ink-muted);
+	--ring: var(--focus);
+}

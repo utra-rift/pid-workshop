@@ -1,0 +1,218 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/lexend/wght.css";
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+@import "./design/tokens.css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Widescreen (trial licence, see README). WOFF2 converted from the handoff TTFs. */
+/* Ultra Expanded, the widest cut: the hero's R and FT, like the poster's RIFT. */
+@font-face {
+	font-family: "Widescreen UEx";
+	src: url("/fonts/WidescreenUEx_Trial_Bd.woff2") format("woff2");
+	font-weight: 700;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Widescreen Ex";
+	src: url("/fonts/WidescreenEx_Trial_Bd.woff2") format("woff2");
+	font-weight: 700;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Widescreen Ex";
+	src: url("/fonts/WidescreenEx_Trial_SBd.woff2") format("woff2");
+	font-weight: 600;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Widescreen Ex";
+	src: url("/fonts/WidescreenEx_Trial_Md.woff2") format("woff2");
+	font-weight: 500;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Widescreen";
+	src: url("/fonts/Widescreen_Trial_SBd.woff2") format("woff2");
+	font-weight: 600;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Widescreen";
+	src: url("/fonts/Widescreen_Trial_Md.woff2") format("woff2");
+	font-weight: 500;
+	font-display: swap;
+}
+
+/* Only brand colours exist as utilities; Tailwind's default palette is removed. */
+@theme {
+	--color-*: initial;
+	--color-white: #ffffff;
+	--color-black: #000000;
+
+	--font-*: initial;
+	--font-display: "Widescreen Ex", "Lexend Giga", system-ui, sans-serif;
+	--font-display-wide: "Widescreen UEx", "Widescreen Ex", "Lexend Giga", system-ui, sans-serif;
+	--font-wide: "Widescreen", "Lexend Variable", "Lexend", system-ui, sans-serif;
+	--font-sans: "Lexend Variable", "Lexend", system-ui, sans-serif;
+	--font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+	/* Sharp by default: buttons and inputs 2px, cards 4px, tags pill. */
+	--radius-xs: 2px;
+	--radius-sm: 2px;
+	--radius-md: 4px;
+	--radius-lg: 4px;
+	--radius-xl: 4px;
+	--radius-pill: 999px;
+
+	--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+	--color-ice: var(--ice);
+	--color-navy: var(--navy);
+	--color-cyan: var(--cyan);
+	--color-violet: var(--violet);
+	--color-surface: var(--surface);
+	--color-surface-raised: var(--surface-raised);
+	--color-surface-brand: var(--surface-brand);
+	--color-line: var(--line);
+	--color-ink: var(--ink);
+	--color-ink-muted: var(--ink-muted);
+	--color-on-navy: var(--on-navy);
+	--color-on-cyan: var(--on-cyan);
+	--color-on-violet: var(--on-violet);
+	--color-cyan-text: var(--cyan-text);
+	--color-cyan-soft: var(--cyan-soft);
+	--color-violet-text: var(--violet-text);
+	--color-violet-soft: var(--violet-soft);
+	--color-focus: var(--focus);
+	--color-link: var(--link);
+
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	/* Flat: shadcn's hairline shadows become the card token or nothing. */
+	--shadow-xs: 0 0 #0000;
+	--shadow-sm: var(--shadow-card);
+	--shadow-glow: var(--glow-spark);
+}
+
+/* Type styles from src/design/tokens.data.ts. */
+@utility type-display-xl {
+	font-family: var(--font-display);
+	font-size: 72px;
+	line-height: 72px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+@utility type-display-lg {
+	font-family: var(--font-display);
+	font-size: 40px;
+	line-height: 44px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+@utility type-display-sm {
+	font-family: var(--font-display);
+	font-size: 24px;
+	line-height: 30px;
+	font-weight: 500;
+	text-transform: uppercase;
+}
+@utility type-title {
+	font-family: var(--font-sans);
+	font-size: 20px;
+	line-height: 28px;
+	font-weight: 600;
+}
+@utility type-body {
+	font-family: var(--font-sans);
+	font-size: 16px;
+	line-height: 24px;
+	font-weight: 400;
+}
+@utility type-body-sm {
+	font-family: var(--font-sans);
+	font-size: 14px;
+	line-height: 20px;
+	font-weight: 400;
+}
+@utility type-label {
+	font-family: var(--font-wide);
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+@utility type-data {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 20px;
+	font-weight: 500;
+}
+
+@layer base {
+	*,
+	::after,
+	::before {
+		border-color: var(--color-border);
+	}
+
+	html {
+		color-scheme: light;
+	}
+	[data-theme="dark"] {
+		color-scheme: dark;
+	}
+
+	body {
+		background-color: var(--color-background);
+		color: var(--color-foreground);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	/* Every interactive element: 2px solid focus ring, 2px offset. */
+	:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	::selection {
+		background-color: var(--cyan);
+		color: var(--on-cyan);
+	}
+}
+
+/* PID Workshop. */
+@layer base {
+	html,
+	body {
+		min-height: 100%;
+	}
+}
+
+/* Monaco draws its own focus; keep the brand ring off its hidden textarea. */
+.monaco-editor :focus-visible {
+	outline: none;
+}
