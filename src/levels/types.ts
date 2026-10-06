@@ -4,6 +4,13 @@ import type { Lang, RunResult, SimSpec, Variant } from "#/sim/types";
 /** Text that differs by language. Plain strings apply to both. */
 export type Localized = string | Record<Lang, string>;
 
+/** One piece of a level's briefing. Text allows inline `code` and **bold**. */
+export type BriefingBlock =
+	| { text: string }
+	| { list: string[] }
+	/** The arm at rest at `angle`, with a dashed target line when `target` is given and the latch when `latch` is set. */
+	| { arm: { angle: number; target?: number; latch?: boolean } };
+
 export interface WrongAnswer {
 	name: string;
 	code: Partial<Record<Lang, string>>;
@@ -18,6 +25,11 @@ export interface Level {
 	/** One or two sentences: what's going on. Inline `code` and **bold** allowed. */
 	story: string;
 	goal: string;
+	/**
+	 * A plain-language walkthrough for students new to the idea, shown between the
+	 * story and the goal. Blocks render in order.
+	 */
+	briefing?: BriefingBlock[];
 	hints: [Localized, Localized];
 	/** The takeaway, shown when the level passes. */
 	why: string;
