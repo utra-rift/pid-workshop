@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, LoaderCircle } from "lucide-react";
+import { ArrowRight, Download, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "#/components/site/SiteHeader";
 import { Badge } from "#/components/ui/badge";
@@ -8,6 +8,7 @@ import { LEVELS, sectionOf } from "#/levels";
 import { storage, useStored } from "#/lib/storage";
 import { cn } from "#/lib/utils";
 import {
+	isDownloaded,
 	type PrepareStatus,
 	prepareLanguage,
 	prepareProgress,
@@ -23,6 +24,8 @@ const LANGUAGES: {
 	lang: Lang;
 	name: string;
 	blurb: string;
+	/** What picking it downloads, compressed, the first time. */
+	download: string;
 	tag?: string;
 }[] = [
 	{
@@ -30,6 +33,7 @@ const LANGUAGES: {
 		name: "Python",
 		blurb:
 			"Never written code before? Start here. Python has no braces, semicolons or type names to get wrong.",
+		download: "10 MB",
 		tag: "First time",
 	},
 	{
@@ -37,6 +41,7 @@ const LANGUAGES: {
 		name: "C++",
 		blurb:
 			"The language the robot runs. Clang compiles it in your browser and shows the same errors it would on a laptop.",
+		download: "50 MB",
 	},
 ];
 
@@ -61,6 +66,27 @@ function Home() {
 		if (saved) void prepareLanguage(saved).catch(() => {});
 	}, []);
 
+	// Which languages would download on Start. Unknown until the cache answers,
+	// so a cached language never flashes its size.
+	const [downloaded, setDownloaded] = useState<Partial<Record<Lang, boolean>>>(
+		{},
+	);
+	useEffect(() => {
+		const mark = (lang: Lang, value: boolean) =>
+			setDownloaded((current) =>
+				current[lang] ? current : { ...current, [lang]: value },
+			);
+		const stops = LANGUAGES.map(({ lang }) => {
+			void isDownloaded(lang).then((value) => mark(lang, value));
+			return watchPrepare(lang, (status) => {
+				if (status.done) mark(lang, true);
+			});
+		});
+		return () => {
+			for (const stop of stops) stop();
+		};
+	}, []);
+
 	const start = async (choice: Lang) => {
 		storage.setLang(choice);
 		setPreparing(choice);
@@ -74,10 +100,9 @@ function Home() {
 
 	return (
 		<div className="flex min-h-screen flex-col">
-			<SiteHeader />
+			<SiteHeader markHref="https://rift.utra.ca" />
 			<main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-4 py-12 sm:px-8 sm:py-16">
 				<section className="flex flex-col gap-5">
-					<p className="type-label text-cyan-text">RIFT · ARC Championships</p>
 					<h1 className="type-display-lg max-w-3xl text-ink sm:type-display-xl">
 						Learn PID
 					</h1>
@@ -168,17 +193,19 @@ function Home() {
 												className="size-4 transition-transform group-hover:translate-x-1"
 												aria-hidden
 											/>
+											{downloaded[option.lang] === false && (
+												<Badge className="ml-auto text-ink-muted">
+													<Download aria-hidden />
+													{option.download}
+													<span className="sr-only"> download</span>
+												</Badge>
+											)}
 										</span>
 									)}
 								</a>
 							);
 						})}
 					</div>
-					<p className="type-body-sm text-ink-muted">
-						Picking a language downloads it first: about 10 MB for Python, 50 MB
-						for C++. Your browser keeps a copy, so that only happens once. You
-						can switch languages on any level.
-					</p>
 				</section>
 
 				<section aria-labelledby="levels" className="flex flex-col gap-4">

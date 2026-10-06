@@ -37,7 +37,7 @@ Accounts or any server that stores data, running code on a server, Java, phone l
 
 | Route | Purpose | SSR |
 |---|---|---|
-| `/` | What this is, language picker (Python marked "First time"), level list | yes |
+| `/` | What this is, language picker (Python marked "First time", each card with a download-size badge unless the browser already has that language cached), level list | yes |
 | `/level/$levelId` | The play screen | no |
 
 Picking a language downloads and starts everything the lesson needs before opening it: the runtime (Pyodide or clang) and the language server, with a progress bar in the card. The lesson opens once the runtime is running. The language server gets up to 30 s more, then keeps loading inside the lesson, so a stuck one can't block it. Both stay alive while the student moves between levels. A returning student's language starts downloading as soon as the landing page opens. Each card is also a plain link to its first level, so a click before the page hydrates still works.

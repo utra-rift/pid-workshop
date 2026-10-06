@@ -1,4 +1,5 @@
 import type { Lang } from "#/sim/types";
+import { TOOLS } from "#/tools";
 import type { RuntimeStatus } from "./client";
 
 export interface PrepareStatus {
@@ -101,4 +102,41 @@ export function prepareProgress(status: PrepareStatus): number | null {
 		}
 	}
 	return total > 0 ? Math.min(1, loaded / total) : null;
+}
+
+/** The big files each language downloads. If they're cached, so is the rest. */
+const BIG_FILES: Record<Lang, () => string[]> = {
+	python: () => [
+		`${TOOLS.pyodide.base}/pyodide.asm.wasm`,
+		`${TOOLS.pyodide.base}/python_stdlib.zip`,
+		TOOLS.basedpyright.worker,
+	],
+	cpp: () => [
+		...TOOLS.clang.gzipped.map((file) => `${TOOLS.clang.base}/${file}.gz`),
+		TOOLS.clangd.wasmGz,
+	],
+};
+
+/**
+ * Whether starting this language would skip the download: it's already
+ * running on this page, or the browser has its files cached. Asks the HTTP
+ * cache without touching the network.
+ */
+export async function isDownloaded(lang: Lang): Promise<boolean> {
+	if (entry(lang).status.done) return true;
+	const cached = await Promise.all(
+		BIG_FILES[lang]().map(async (url) => {
+			try {
+				const response = await fetch(url, {
+					cache: "only-if-cached",
+					mode: "same-origin",
+				});
+				await response.body?.cancel();
+				return response.ok;
+			} catch {
+				return false;
+			}
+		}),
+	);
+	return cached.every(Boolean);
 }
