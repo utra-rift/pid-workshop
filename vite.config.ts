@@ -140,7 +140,15 @@ export default defineConfig({
 	plugins: [
 		clientOnly(),
 		serveTools(),
-		nitro({ routeRules: { "/**": { headers: ISOLATION } } }),
+		nitro({
+			routeRules: {
+				"/**": { headers: ISOLATION },
+				// Hosts like Vercel stop at the first matching route, and Nitro's own
+				// cache rule for /assets comes first. Worker scripts live there, and
+				// a worker without COEP won't start, so repeat the headers.
+				"/assets/**": { headers: ISOLATION },
+			},
+		}),
 		tailwindcss(),
 		tanstackStart(),
 		viteReact(),

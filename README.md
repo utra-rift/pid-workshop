@@ -71,7 +71,10 @@ They're set in three places: `src/start.ts` for server-rendered pages, `nitro({ 
 
 `pnpm build` produces a Nitro server in `.output/`. Pick the host with a Nitro preset, the same as rift-web: `NITRO_PRESET=vercel pnpm build`, or `cloudflare_module` for Cloudflare Workers (not tried yet).
 
-Before deploying to Vercel, run `node scripts/check-vercel.mjs`. It copies the built function to a temp folder, away from the project's `node_modules`, and requests a few pages, so a package missing from the function fails there instead of in production.
+Before deploying to Vercel, run `node scripts/check-vercel.mjs`. It checks two things that broke in production:
+
+- **Headers on static files.** It replays Vercel's first-match routing from `.vercel/output/config.json` and checks that every script, wasm file and page gets COOP and COEP. Nitro's own cache rule for `/assets` matches first, so `vite.config.ts` repeats the headers on `/assets/**`. Without them, worker scripts are blocked (`blocked:COEP-framed-resource-needs-coep-header`) and Python and C++ fail with "The worker crashed."
+- **The server function.** It copies the built function to a temp folder, away from the project's `node_modules`, and requests a few pages, so a package missing from the function fails there instead of in production.
 
 Monaco and the language servers must stay out of the server bundle. `clientOnly()` in `vite.config.ts` replaces `src/editor/monaco.ts` and `src/editor/lsp/servers.ts` with stubs in the server build. Without it, the bundler put shared helpers in the language-server chunk, every server render loaded that chunk, and Vercel failed with `Cannot find module 'vscode-jsonrpc'`. Keep editor and language-server code behind those two modules, and import them only dynamically.
 
