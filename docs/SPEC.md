@@ -1,4 +1,4 @@
-# PID Workshop spec
+# Learn PID spec
 
 Status: built, 2026-10-06. This describes what the code does; see the README to run it.
 Owner: Evan Yu. Requested by Aaron Huang for the RIFT embedded/controls workshop (ARC Championships).
@@ -37,20 +37,21 @@ Accounts or any server that stores data, running code on a server, Java, phone l
 | Route | Purpose | SSR |
 |---|---|---|
 | `/` | What this is, language picker (Python marked "First time"), level list | yes |
-| `/setup` | Downloads each language's tools with progress bars | no |
 | `/level/$levelId` | The play screen | no |
+
+Picking a language downloads and starts everything the lesson needs before opening it: the runtime (Pyodide or clang) and the language server, with a progress bar in the card. The lesson opens once the runtime is running. The language server gets up to 30 s more, then keeps loading inside the lesson, so a stuck one can't block it. Both stay alive while the student moves between levels. A returning student's language starts downloading as soon as the landing page opens. Each card is also a plain link to its first level, so a click before the page hydrates still works.
 
 - `?lang=cpp|python` sets the language; `?instructor=1` unlocks every level and the Answer button, `?instructor=0` turns that off. Both are saved and removed from the URL.
 - Share links carry the code in the hash: `/level/03-brakes?lang=python#code=<lz-string>`. The page reads it once, saves it as the student's code for that level, and clears the hash.
 
 ## Play screen
 
-Wide screens (1280 px and up) have two columns. On the left are the level brief, the arm, the response graph and the metrics. On the right are the editor, the console and the verdict, which stay in view while the page scrolls. Narrower screens stack them in reading order: brief, code, verdict, then the arm and graph.
+The top bar holds the RIFT mark and the level chips (numbered, a check when passed, a lock when locked, a divider before the stretch levels). There are no other navigation links. Wide screens (1280 px and up) have two columns. On the left are the level brief, the arm, the response graph and the metrics. On the right are the editor, the console and the verdict, which stay in view while the page scrolls. Narrower screens stack them in reading order: brief, code, verdict, then the arm and graph.
 
-- **Level rail.** Numbered chips, with a check when passed and a lock when locked. A level unlocks when the previous one passes. Stretch levels come after a divider.
+- **Levels.** A level unlocks when the previous one passes. The current one scrolls into view in the top bar.
 - **Brief.** Title, story, goal, two hints shown one at a time, and an Answer dialog. Answer appears in instructor mode, or after both hints and two failed runs. "Use this code" replaces the editor contents.
 - **Arm.** SVG with a scale from -30° to 150°, hard stops, the target ray, the latch while it holds, a game piece ring, a flash when a defender hits, a motor-effort arc around the pivot, and a BROWNOUT label. Replays in real time after each run, with Replay and Skip buttons.
-- **Response graph.** Canvas with three strips: angle and target, motor volts, and the student's `plot()` lines with their own scale. Event markers show piece, release and brownout. Hovering shows the values at that time.
+- **Response graph.** Canvas with three strips: angle and target, motor volts, and the student's `plot()` lines with their own scale. Event markers show piece, release and brownout. Hovering shows the values at that time. Each live value in the legend has a fixed-width slot, so values that change every frame (the motor especially) don't shift the text around them. Hovering or focusing a legend entry highlights its line and dims the others. The `plot()` strip scales to the 1st–99th percentile of its values, so one spike, such as a derivative's first tick, can't flatten the rest.
 - **Metrics.** Overshoot, settle error, peak motor and jitter for the variant on screen, plus a chip for each hidden test variant. Clicking a chip replays that variant.
 - **Editor header.** Python or C++ toggle, `controller.py`/`robot.py` (or `controller.cpp`/`robot.h`, read-only) tabs, "use my code from the last level" (when there is some), Reset with a confirm, Share, and Run (also Ctrl/Cmd+Enter). A progress bar shows while the toolchain downloads.
 - **Status line and console.** The status line shows the language server and runtime state. The console shows compiler output, `print`/`printf`/`std::cout`, tracebacks and a one-line summary of each variant.
@@ -179,7 +180,7 @@ COOP `same-origin` and COEP `require-corp` are set on every response: by TanStac
 
 - **App** (Nitro preset for Vercel or Cloudflare): 39 MB of static files, mostly Pyodide (15 MB) and the basedpyright worker (18 MB). Every file is under Cloudflare's 25 MiB limit.
 - **Tools** on R2: clang (75 MB wasm plus a 30 MB header and library tar) and clangd (126 MB wasm). Built with `VITE_TOOLS_URL`.
-- **Downloads per student:** Python about 10 MB compressed, C++ about 45 MB. `/setup` downloads them ahead of time.
+- **Downloads per student:** Python about 10 MB compressed, C++ about 45 MB, downloaded when the student picks a language.
 
 ## Testing
 
@@ -187,6 +188,7 @@ COOP `same-origin` and COEP `require-corp` are set on every response: by TanStac
 |---|---|---|
 | `tests/levels.test.ts` | Solutions pass every variant, starters fail, each wrong answer gets its message, in both languages, using real Pyodide and clang | 73/73 |
 | `tests/sim.test.ts` | Gravity, hold voltage, clipping, timing, noise determinism, brownout, metrics | 10/10 |
+| `scripts/smoke-start.mjs` | Landing page download flow, the lesson opening ready, level chips in the header, the legend not moving, the card working as a plain link | 8/8 |
 | `scripts/smoke.mjs` | In Chromium: level 1 passes, live error underlines and completion, in both languages | pass, dev and production |
 | `scripts/smoke-errors.mjs` | Python `global`, syntax errors, infinite loops in both languages, missing semicolon, wrong function name, `printf` | 7/7, dev and production |
 | `scripts/smoke-levels.mjs` | Every level's answer in the browser, both languages | 22/22 |
@@ -197,7 +199,7 @@ COOP `same-origin` and COEP `require-corp` are set on every response: by TanStac
 |---|---|
 | clangd binary provenance | Uses clangd-in-browser's published build, pinned by sha256. `scripts/clangd/build.sh` builds our own but hasn't been run |
 | Memory on low-end laptops | clangd reserves 2 GB of shared memory and starts a thread pool. The T3 preview browser disconnected during one test with clangd running. Test on the weakest Chromebook; steer those students to Python |
-| Offline at the venue | `/setup` warms the HTTP cache only. A service worker would be sturdier |
+| Offline at the venue | Picking a language warms the HTTP cache only. A service worker would be sturdier |
 | Deploy preset | Only the Node preset has been built. Check the chosen host serves the headers on static files |
 | Safari and Firefox | Not tested yet |
 | Fonts | Widescreen trial files, carried over from rift-web |

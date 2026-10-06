@@ -77,8 +77,8 @@ export const Route = createFileRoute("/level/$levelId")({
 			meta: [
 				{
 					title: level
-						? `${level.number}. ${level.title} · PID Workshop`
-						: "PID Workshop",
+						? `${level.number}. ${level.title} · Learn PID`
+						: "Learn PID",
 				},
 			],
 		};
@@ -315,13 +315,14 @@ function LevelPage() {
 	return (
 		<TooltipProvider>
 			<div className="flex min-h-screen flex-col">
-				<SiteHeader />
-				<LevelRail
-					levels={LEVELS}
-					currentId={level.id}
-					passed={progress}
-					isUnlocked={isUnlocked}
-				/>
+				<SiteHeader>
+					<LevelRail
+						levels={LEVELS}
+						currentId={level.id}
+						passed={progress}
+						isUnlocked={isUnlocked}
+					/>
+				</SiteHeader>
 
 				{!unlocked ? (
 					<main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-16">

@@ -4,7 +4,7 @@ import {
 } from "vscode-languageserver-protocol/browser";
 import type { RuntimeStatus } from "#/runtimes/client";
 import { ROBOT_PYI } from "#/runtimes/python/files";
-import type { WorkerEvent } from "#/runtimes/rpc";
+import { fetchBytes, type WorkerEvent } from "#/runtimes/rpc";
 import type { Lang } from "#/sim/types";
 import { TOOLS } from "#/tools";
 import type { MonacoApi } from "../monaco";
@@ -52,7 +52,17 @@ export class LanguageServer {
 
 	private async startPython(): Promise<LspClient> {
 		this.setStatus({ state: "loading", label: "Python language server" });
-		const url = TOOLS.basedpyright.worker;
+		// Download the 18 MB worker ourselves for a progress bar, then run it
+		// from memory. Its background workers reuse the same blob URL.
+		const bytes = await fetchBytes(
+			TOOLS.basedpyright.worker,
+			"Python language server",
+			(loaded, total, label) =>
+				this.setStatus({ state: "loading", loaded, total, label }),
+		);
+		const url = URL.createObjectURL(
+			new Blob([bytes as BlobPart], { type: "text/javascript" }),
+		);
 		const worker = new Worker(url, { name: "basedpyright", type: "classic" });
 		worker.postMessage({ type: "browser/boot", mode: "foreground" });
 		// basedpyright asks for helper workers to do background analysis.

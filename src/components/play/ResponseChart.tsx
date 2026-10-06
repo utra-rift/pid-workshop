@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "#/lib/utils";
 import { ARM } from "#/sim/arm";
 import type { RunResult, SimSpec } from "#/sim/types";
 
@@ -40,14 +41,25 @@ interface Strip {
 	dataHi?: number;
 }
 
+interface Series {
+	key: string;
+	strip: Strip;
+	values: (number | null)[];
+	color: string;
+	width: number;
+	dash?: number[];
+}
+
 const PAD = { left: 48, right: 12, top: 8, bottom: 26 };
 
 export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const [width, setWidth] = useState(600);
 	const [hover, setHover] = useState<number | null>(null);
+	// The series whose legend entry is hovered or focused; the rest dim.
+	const [focus, setFocus] = useState<string | null>(null);
 	const plotNames = useMemo(() => Object.keys(run?.plots ?? {}), [run]);
-	const height = plotNames.length ? 300 : 236;
+	const height = plotNames.length ? 340 : 236;
 
 	useEffect(() => {
 		const el = canvas.current?.parentElement;
@@ -68,20 +80,30 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 
 		const innerH = height - PAD.top - PAD.bottom;
 		const gap = 18;
-		const angleH = plotNames.length ? innerH * 0.56 : innerH * 0.72;
-		const voltsH = plotNames.length ? innerH * 0.2 : innerH - angleH - gap;
+		const angleH = plotNames.length ? innerH * 0.5 : innerH * 0.72;
+		const voltsH = plotNames.length ? innerH * 0.18 : innerH - angleH - gap;
 		const plotsH = plotNames.length ? innerH - angleH - voltsH - gap * 2 : 0;
 
-		let plo = Number.POSITIVE_INFINITY;
-		let phi = Number.NEGATIVE_INFINITY;
+		// Scale to the 1st-99th percentile so one spike (a derivative's first
+		// tick, say) can't flatten everything else. Outliers get clipped.
+		const values: number[] = [];
 		for (const name of plotNames) {
-			for (const v of run?.plots[name] ?? []) {
-				if (v === null) continue;
-				plo = Math.min(plo, v);
-				phi = Math.max(phi, v);
-			}
+			for (const v of run?.plots[name] ?? []) if (v !== null) values.push(v);
 		}
-		if (!Number.isFinite(plo)) {
+		values.sort((a, b) => a - b);
+		const at = (q: number) =>
+			values[Math.min(values.length - 1, Math.floor(q * values.length))];
+		let plo = values.length
+			? values.length >= 100
+				? at(0.01)
+				: values[0]
+			: Number.NaN;
+		let phi = values.length
+			? values.length >= 100
+				? at(0.99)
+				: values[values.length - 1]
+			: Number.NaN;
+		if (!Number.isFinite(plo) || !Number.isFinite(phi)) {
 			plo = -1;
 			phi = 1;
 		}
@@ -156,9 +178,16 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 				strips.plots;
 			gridLine(strips.plots, dataHi, compact(dataHi));
 			gridLine(strips.plots, dataLo, compact(dataLo));
-			const span = dataHi - dataLo;
-			if (dataLo < 0 && dataHi > 0 && Math.min(-dataLo, dataHi) > span * 0.2)
-				gridLine(strips.plots, 0, "0");
+			// A zero line, labelled only if the label clears the other two.
+			if (dataLo < 0 && dataHi > 0) {
+				const zero = y(strips.plots, 0);
+				const clear =
+					Math.min(
+						zero - y(strips.plots, dataHi),
+						y(strips.plots, dataLo) - zero,
+					) >= 12;
+				gridLine(strips.plots, 0, clear ? "0" : "");
+			}
 		}
 		ctx.textAlign = "center";
 		ctx.fillStyle = SERIES_COLORS.axis;
@@ -202,33 +231,51 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 			ctx.restore();
 		};
 
-		line(
-			strips.angle,
-			samples.map((s) => s.target),
-			SERIES_COLORS.target,
-			1.5,
-			[5, 4],
-		);
-		line(
-			strips.angle,
-			samples.map((s) => s.angle),
-			SERIES_COLORS.angle,
-			2,
-		);
-		line(
-			strips.volts,
-			samples.map((s) => s.volts),
-			SERIES_COLORS.volts,
-			1.25,
-		);
-		plotNames.forEach((name, i) => {
+		const series: Series[] = [
+			{
+				key: "target",
+				strip: strips.angle,
+				values: samples.map((s) => s.target),
+				color: SERIES_COLORS.target,
+				width: 1.5,
+				dash: [5, 4],
+			},
+			{
+				key: "angle",
+				strip: strips.angle,
+				values: samples.map((s) => s.angle),
+				color: SERIES_COLORS.angle,
+				width: 2,
+			},
+			{
+				key: "volts",
+				strip: strips.volts,
+				values: samples.map((s) => s.volts),
+				color: SERIES_COLORS.volts,
+				width: 1.25,
+			},
+			...plotNames.map((name, i) => ({
+				key: `plot:${name}`,
+				strip: strips.plots,
+				values: run?.plots[name] ?? [],
+				color: PLOT_COLORS[i % PLOT_COLORS.length],
+				width: 1.5,
+			})),
+		];
+		// The highlighted series goes on top.
+		series.sort((a, b) => Number(a.key === focus) - Number(b.key === focus));
+		for (const s of series) {
+			const dimmed = focus !== null && s.key !== focus;
+			ctx.globalAlpha = dimmed ? 0.15 : 1;
 			line(
-				strips.plots,
-				run?.plots[name] ?? [],
-				PLOT_COLORS[i % PLOT_COLORS.length],
-				1.5,
+				s.strip,
+				s.values,
+				s.color,
+				s.key === focus ? s.width + 0.75 : s.width,
+				s.dash,
 			);
-		});
+		}
+		ctx.globalAlpha = 1;
 
 		// Events.
 		ctx.font = '600 9px "Widescreen", "Lexend Variable", sans-serif';
@@ -261,7 +308,7 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 			ctx.lineTo(cx, height - PAD.bottom);
 			ctx.stroke();
 		}
-	}, [width, height, strips, run, t, spec.durationS, plotNames, hover]);
+	}, [width, height, strips, run, t, spec.durationS, plotNames, hover, focus]);
 
 	const samples = run?.samples ?? [];
 	const readoutT = hover ?? Math.min(t, spec.durationS);
@@ -278,16 +325,28 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 					color={SERIES_COLORS.target}
 					dashed
 					label="target"
+					width={4}
+					focused={focus}
+					seriesKey="target"
+					onFocusChange={setFocus}
 					value={readout ? `${readout.target.toFixed(0)}°` : undefined}
 				/>
 				<LegendItem
 					color={SERIES_COLORS.angle}
 					label="arm"
+					width={6}
+					focused={focus}
+					seriesKey="angle"
+					onFocusChange={setFocus}
 					value={readout ? `${readout.angle.toFixed(1)}°` : undefined}
 				/>
 				<LegendItem
 					color={SERIES_COLORS.volts}
 					label="motor"
+					width={7}
+					focused={focus}
+					seriesKey="volts"
+					onFocusChange={setFocus}
 					value={readout ? `${readout.volts.toFixed(1)} V` : undefined}
 				/>
 				{plotNames.map((name, i) => {
@@ -297,11 +356,20 @@ export function ResponseChart({ spec, run, t }: ResponseChartProps) {
 							key={name}
 							color={PLOT_COLORS[i % PLOT_COLORS.length]}
 							label={name}
+							width={7}
+							focused={focus}
+							seriesKey={`plot:${name}`}
+							onFocusChange={setFocus}
 							value={v === null || v === undefined ? undefined : compact(v)}
 						/>
 					);
 				})}
-				{readout && <span className="ml-auto">{readoutT.toFixed(2)} s</span>}
+				<span
+					className="ml-auto inline-block text-right tabular-nums"
+					style={{ width: "7ch" }}
+				>
+					{readout ? `${readoutT.toFixed(2)} s` : ""}
+				</span>
 			</div>
 			<div className="relative w-full">
 				<canvas
@@ -338,19 +406,46 @@ const EVENT_LABEL = {
 	waypoint: "NEW TARGET",
 } as const;
 
+/**
+ * A legend entry with its live value in a fixed-width slot, so values that
+ * change every frame (the motor especially) don't shift the text around them.
+ * Hovering or focusing it highlights its line and dims the others.
+ */
 function LegendItem({
 	color,
 	label,
 	value,
+	width,
 	dashed,
+	seriesKey,
+	focused,
+	onFocusChange,
 }: {
 	color: string;
 	label: string;
 	value?: string;
+	/** Characters to reserve for the value. The font is monospaced. */
+	width: number;
 	dashed?: boolean;
+	seriesKey: string;
+	focused: string | null;
+	onFocusChange: (key: string | null) => void;
 }) {
+	const dimmed = focused !== null && focused !== seriesKey;
 	return (
-		<span className="flex items-center gap-1.5">
+		<button
+			type="button"
+			aria-pressed={focused === seriesKey}
+			aria-label={`Highlight ${label}`}
+			onMouseEnter={() => onFocusChange(seriesKey)}
+			onMouseLeave={() => onFocusChange(null)}
+			onFocus={() => onFocusChange(seriesKey)}
+			onBlur={() => onFocusChange(null)}
+			className={cn(
+				"flex cursor-default items-center gap-1.5 rounded-xs transition-opacity",
+				dimmed && "opacity-40",
+			)}
+		>
 			<svg width="16" height="6" aria-hidden="true">
 				<line
 					x1="0"
@@ -363,8 +458,13 @@ function LegendItem({
 				/>
 			</svg>
 			<span>{label}</span>
-			{value !== undefined && <span className="text-ink">{value}</span>}
-		</span>
+			<span
+				className="inline-block text-right text-ink tabular-nums"
+				style={{ width: `${width}ch` }}
+			>
+				{value ?? ""}
+			</span>
+		</button>
 	);
 }
 

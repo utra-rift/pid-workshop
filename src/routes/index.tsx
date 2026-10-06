@@ -1,22 +1,37 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRight } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { ArrowRight, LoaderCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 import { SiteHeader } from "#/components/site/SiteHeader";
 import { Badge } from "#/components/ui/badge";
+import { Progress } from "#/components/ui/progress";
 import { LEVELS } from "#/levels";
 import { storage, useStored } from "#/lib/storage";
 import { cn } from "#/lib/utils";
+import {
+	type PrepareStatus,
+	prepareLanguage,
+	prepareProgress,
+	watchPrepare,
+} from "#/runtimes/prepare";
 import type { Lang } from "#/sim/types";
 
 export const Route = createFileRoute("/")({
 	component: Home,
 });
 
-const LANGUAGES: { lang: Lang; name: string; blurb: string; tag?: string }[] = [
+const LANGUAGES: {
+	lang: Lang;
+	name: string;
+	blurb: string;
+	size: string;
+	tag?: string;
+}[] = [
 	{
 		lang: "python",
 		name: "Python",
 		blurb:
 			"Never written code before? Start here. Short to type and easy to read.",
+		size: "about 10 MB",
 		tag: "First time",
 	},
 	{
@@ -24,6 +39,7 @@ const LANGUAGES: { lang: Lang; name: string; blurb: string; tag?: string }[] = [
 		name: "C++",
 		blurb:
 			"What runs on the robot. Compiled in your browser with the real clang.",
+		size: "about 45 MB",
 	},
 ];
 
@@ -34,8 +50,28 @@ function Home() {
 	const next = LEVELS.find((level) => !progress[level.id]) ?? LEVELS[0];
 	const started = Object.keys(progress).length > 0;
 
-	const start = (choice: Lang) => {
+	// Everything a lesson needs downloads first, so it opens ready to run.
+	const [preparing, setPreparing] = useState<Lang | null>(null);
+	const [status, setStatus] = useState<PrepareStatus | null>(null);
+	useEffect(() => {
+		if (!preparing) return;
+		return watchPrepare(preparing, setStatus);
+	}, [preparing]);
+
+	// A returning student's language starts downloading as soon as they arrive.
+	useEffect(() => {
+		const saved = storage.getLang();
+		if (saved) void prepareLanguage(saved).catch(() => {});
+	}, []);
+
+	const start = async (choice: Lang) => {
 		storage.setLang(choice);
+		setPreparing(choice);
+		try {
+			await prepareLanguage(choice);
+		} catch {
+			return;
+		}
 		void navigate({ to: "/level/$levelId", params: { levelId: next.id } });
 	};
 
@@ -64,45 +100,89 @@ function Home() {
 						Pick a language
 					</h2>
 					<div className="grid gap-4 sm:grid-cols-2">
-						{LANGUAGES.map((option) => (
-							<button
-								key={option.lang}
-								type="button"
-								onClick={() => start(option.lang)}
-								className={cn(
-									"group flex cursor-pointer flex-col gap-3 rounded-md border bg-surface-raised p-6 text-left transition-colors hover:border-cyan",
-									lang === option.lang ? "border-cyan" : "border-line",
-								)}
-							>
-								<div className="flex items-center justify-between gap-3">
-									<span className="type-display-sm text-ink">
-										{option.name}
-									</span>
-									{option.tag && <Badge variant="cyan">{option.tag}</Badge>}
-								</div>
-								<p className="type-body-sm text-ink-muted">{option.blurb}</p>
-								<span className="mt-auto flex items-center gap-2 type-label text-cyan-text">
-									{started && lang === option.lang
-										? `Continue at level ${next.number}`
-										: "Start level 1"}
-									<ArrowRight
-										className="size-4 transition-transform group-hover:translate-x-1"
-										aria-hidden
-									/>
-								</span>
-							</button>
-						))}
+						{LANGUAGES.map((option) => {
+							const busy = preparing === option.lang;
+							const progressValue =
+								busy && status ? prepareProgress(status) : null;
+							return (
+								// A real link, so a click before the page hydrates still opens the
+								// lesson (which then downloads with its own progress bar).
+								<a
+									key={option.lang}
+									href={`/level/${next.id}?lang=${option.lang}`}
+									onClick={(event) => {
+										event.preventDefault();
+										if (preparing === null || status?.error)
+											void start(option.lang);
+									}}
+									aria-disabled={
+										(preparing !== null && !status?.error) || undefined
+									}
+									aria-busy={busy && !status?.error}
+									className={cn(
+										"group flex cursor-pointer flex-col gap-3 rounded-md border bg-surface-raised p-6 text-left transition-colors hover:border-cyan aria-disabled:cursor-default",
+										busy || (!preparing && lang === option.lang)
+											? "border-cyan"
+											: "border-line",
+										preparing &&
+											!busy &&
+											!status?.error &&
+											"opacity-50 hover:border-line",
+									)}
+								>
+									<div className="flex items-center justify-between gap-3">
+										<span className="type-display-sm text-ink">
+											{option.name}
+										</span>
+										{option.tag && <Badge variant="cyan">{option.tag}</Badge>}
+									</div>
+									<p className="type-body-sm text-ink-muted">{option.blurb}</p>
+									{busy && status?.error ? (
+										<span className="mt-auto flex flex-col gap-1 type-body-sm">
+											<span className="text-[#FF6B81]">
+												Couldn't download: {status.error}
+											</span>
+											<span className="type-label text-cyan-text">
+												Try again
+											</span>
+										</span>
+									) : busy ? (
+										<span className="mt-auto flex flex-col gap-2">
+											<span className="flex items-center justify-between gap-3 type-label text-cyan-text">
+												<span className="flex items-center gap-2">
+													<LoaderCircle
+														className="size-4 animate-spin"
+														aria-hidden
+													/>
+													Getting {option.name} ready
+												</span>
+												<span className="inline-block w-[4ch] text-right type-data tabular-nums">
+													{progressValue === null
+														? ""
+														: `${Math.round(progressValue * 100)}%`}
+												</span>
+											</span>
+											<Progress value={(progressValue ?? 0) * 100} />
+										</span>
+									) : (
+										<span className="mt-auto flex items-center gap-2 type-label text-cyan-text">
+											{started && lang === option.lang
+												? `Continue at level ${next.number}`
+												: "Start level 1"}
+											<ArrowRight
+												className="size-4 transition-transform group-hover:translate-x-1"
+												aria-hidden
+											/>
+										</span>
+									)}
+								</a>
+							);
+						})}
 					</div>
 					<p className="type-body-sm text-ink-muted">
-						You can switch languages any time. The first load downloads the
-						compiler or Python runtime, so{" "}
-						<Link
-							to="/setup"
-							className="text-link underline-offset-4 hover:underline"
-						>
-							set up before the workshop
-						</Link>{" "}
-						if the wifi is busy.
+						Starting downloads what your language needs: about 10 MB for Python,
+						45 MB for C++. Your browser keeps a copy for next time, and you can
+						switch languages any time.
 					</p>
 				</section>
 

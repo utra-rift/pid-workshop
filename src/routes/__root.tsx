@@ -8,7 +8,7 @@ export const Route = createRootRoute({
 			{ charSet: "utf-8" },
 			{ name: "viewport", content: "width=device-width, initial-scale=1" },
 			{ name: "theme-color", content: "#07101F" },
-			{ title: "PID Workshop · RIFT" },
+			{ title: "Learn PID · RIFT" },
 			{
 				name: "description",
 				content:

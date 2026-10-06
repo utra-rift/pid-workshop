@@ -26,9 +26,9 @@ export function LevelRail({
 	return (
 		<nav
 			aria-label="Levels"
-			className="overflow-x-auto border-b border-line [scrollbar-width:thin]"
+			className="min-w-0 flex-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-40px),transparent)] pr-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 		>
-			<ol className="flex min-w-max items-stretch gap-1 px-4 py-2 sm:px-6">
+			<ol className="flex min-w-max items-center gap-1 py-2">
 				{levels.map((level, i) => {
 					const unlocked = isUnlocked(level);
 					const done = Boolean(passed[level.id]);
@@ -62,7 +62,7 @@ export function LevelRail({
 					return (
 						<li key={level.id} className="flex items-center">
 							{firstStretch && (
-								<span className="mr-2 ml-3 border-l border-line pl-3 type-label text-[11px] text-ink-muted">
+								<span className="mr-1 ml-2 border-l border-line pl-3 type-label text-[11px] text-ink-muted">
 									Stretch
 								</span>
 							)}
@@ -74,7 +74,7 @@ export function LevelRail({
 									search={(prev) => prev}
 									aria-current={active ? "page" : undefined}
 									className={cn(
-										"flex items-center gap-2 rounded-sm px-3 py-1.5 transition-colors",
+										"flex items-center gap-2 rounded-sm px-2.5 py-1.5 transition-colors",
 										active ? "bg-ink text-surface" : "text-ink hover:bg-ink/10",
 									)}
 								>
@@ -83,7 +83,7 @@ export function LevelRail({
 							) : (
 								<span
 									title="Pass the level before this one to unlock it."
-									className="flex cursor-not-allowed items-center gap-2 rounded-sm px-3 py-1.5 text-ink-muted/60"
+									className="flex cursor-not-allowed items-center gap-2 rounded-sm px-2.5 py-1.5 text-ink-muted/60"
 								>
 									{body}
 								</span>

@@ -3,6 +3,7 @@ import { Badge } from "#/components/ui/badge";
 import { storage, useStored } from "#/lib/storage";
 import { cn } from "#/lib/utils";
 
+/** The top bar. On a level, the level chips sit in it (children). */
 export function SiteHeader({
 	className,
 	children,
@@ -14,14 +15,14 @@ export function SiteHeader({
 	return (
 		<header
 			className={cn(
-				"flex items-center justify-between gap-6 border-b border-line px-4 py-3 sm:px-6",
+				"flex h-14 items-center gap-4 border-b border-line px-4 sm:px-6",
 				className,
 			)}
 		>
 			<Link
 				to="/"
-				className="flex items-center gap-3"
-				aria-label="PID Workshop home"
+				className="flex shrink-0 items-center gap-3"
+				aria-label="Learn PID home"
 			>
 				<img
 					src="/logos/rift-mark-white-cropped.svg"
@@ -30,27 +31,22 @@ export function SiteHeader({
 					height={850}
 					className="h-8 w-auto"
 				/>
-				<span className="type-label text-ink">PID Workshop</span>
+				<span
+					className={cn("type-label text-ink", children && "max-lg:sr-only")}
+				>
+					Learn PID
+				</span>
 			</Link>
-			<div className="flex items-center gap-4">
-				{children}
-				{instructor && <Badge variant="violet">Instructor</Badge>}
-				<nav aria-label="Primary" className="flex items-center gap-5">
-					<Link
-						to="/level/$levelId"
-						params={{ levelId: "01-on-off" }}
-						className="type-label text-ink-muted transition-colors hover:text-ink [&.active]:text-ink"
-					>
-						Levels
-					</Link>
-					<Link
-						to="/setup"
-						className="type-label text-ink-muted transition-colors hover:text-ink [&.active]:text-ink"
-					>
-						Setup
-					</Link>
-				</nav>
-			</div>
+			{children && (
+				<div className="flex h-full min-w-0 flex-1 items-center border-l border-line pl-2">
+					{children}
+				</div>
+			)}
+			{instructor && (
+				<Badge variant="violet" className="ml-auto shrink-0">
+					Instructor
+				</Badge>
+			)}
 		</header>
 	);
 }
