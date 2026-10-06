@@ -63,6 +63,29 @@ export const storage = {
 
 	isInstructor: (): boolean => read("instructor", false),
 	setInstructor: (on: boolean) => write("instructor", on ? true : undefined),
+
+	/** The dev tools button, toggled with the Konami code. */
+	isDev: (): boolean => read("dev", false),
+	setDev: (on: boolean) => write("dev", on ? true : undefined),
+
+	/** Marks these levels passed, without any passing code. For testing. */
+	passAll(levels: number[]) {
+		const progress = storage.getProgress();
+		const lang = storage.getLang() ?? "python";
+		const passedAt = new Date().toISOString();
+		for (const level of levels) progress[level] ??= { passedAt, lang };
+		write("progress", progress);
+	},
+
+	/** Clears passed levels, saved code and hints. Settings stay. */
+	resetProgress() {
+		if (typeof localStorage === "undefined") return;
+		for (const key of Object.keys(localStorage)) {
+			if (/^pid:(progress$|code:|passed:|hints:)/.test(key))
+				localStorage.removeItem(key);
+		}
+		notify();
+	},
 };
 
 function subscribe(listener: () => void) {

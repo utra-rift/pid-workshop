@@ -43,6 +43,7 @@ Accounts or any server that stores data, running code on a server, Java, phone l
 Picking a language downloads and starts everything the lesson needs before opening it: the runtime (Pyodide or clang) and the language server, with a progress bar in the card. The lesson opens once the runtime is running. The language server gets up to 30 s more, then keeps loading inside the lesson, so a stuck one can't block it. Both stay alive while the student moves between levels. A returning student's language starts downloading as soon as the landing page opens. Each card is also a plain link to its first level, so a click before the page hydrates still works.
 
 - `?lang=cpp|python` sets the language; `?instructor=1` unlocks every level and the Answer button, `?instructor=0` turns that off. Both are saved and removed from the URL.
+- The Konami code (↑ ↑ ↓ ↓ ← → ← → B A), typed outside the editor, toggles a wrench button in the bottom right of every page; the setting is saved. It opens a dev tools popover: an instructor-mode switch, Pass all and Reset progress (Reset asks twice), cross-origin isolation, and toolchain versions.
 - Share links carry the code in the hash: `/level/03-brakes?lang=python#code=<lz-string>`. The page reads it once, saves it as the student's code for that level, and clears the hash.
 
 ## Play screen

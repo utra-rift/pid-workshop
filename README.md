@@ -32,6 +32,8 @@ Picking a language on the landing page downloads its runtime and language server
 
 Add `?instructor=1` to any level URL to unlock every level and show the Answer button. `?instructor=0` turns it off.
 
+Typing the Konami code (↑ ↑ ↓ ↓ ← → ← → B A) anywhere outside the editor shows a small wrench button in the bottom right; typing it again hides it. The button opens dev tools: a switch for instructor mode, Pass all and Reset (with a confirm) for progress, whether the page is cross-origin isolated, and the toolchain versions.
+
 ## Tests
 
 `pnpm test` runs two suites with vitest:
