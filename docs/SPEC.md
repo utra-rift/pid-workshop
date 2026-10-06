@@ -205,7 +205,7 @@ COOP `same-origin` and COEP `require-corp` are set on every response: by TanStac
 ### Hosting
 
 - **Everything ships with the app** in `public/vendor/`: Pyodide (15 MB), the basedpyright worker (18 MB), clang (26 MB) and clangd (24 MB). clang's 75 MB wasm and 30 MB header tar and clangd's 126 MB wasm are stored gzipped, which puts every file under Cloudflare's 25 MiB limit. The compiler worker swaps in a `fetch` that asks for the `.gz` and inflates it as it streams; the clangd worker inflates its wasm after downloading. Both skip inflating if a server already decoded the file. The static output is about 86 MiB.
-- **Downloads per student:** Python about 10 MB compressed, C++ about 45 MB, downloaded when the student picks a language.
+- **Downloads per student:** Python about 10 MB compressed, C++ about 50 MB, downloaded when the student picks a language.
 
 ## Testing
 

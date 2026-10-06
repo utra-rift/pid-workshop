@@ -23,23 +23,20 @@ const LANGUAGES: {
 	lang: Lang;
 	name: string;
 	blurb: string;
-	size: string;
 	tag?: string;
 }[] = [
 	{
 		lang: "python",
 		name: "Python",
 		blurb:
-			"Never written code before? Start here. Short to type and easy to read.",
-		size: "about 10 MB",
+			"Never written code before? Start here. Python has no braces, semicolons or type names to get wrong.",
 		tag: "First time",
 	},
 	{
 		lang: "cpp",
 		name: "C++",
 		blurb:
-			"What runs on the robot. Compiled in your browser with the real clang.",
-		size: "about 45 MB",
+			"The language the robot runs. Clang compiles it in your browser and shows the same errors it would on a laptop.",
 	},
 ];
 
@@ -82,15 +79,11 @@ function Home() {
 				<section className="flex flex-col gap-5">
 					<p className="type-label text-cyan-text">RIFT · ARC Championships</p>
 					<h1 className="type-display-lg max-w-3xl text-ink sm:type-display-xl">
-						Write your own controller
+						Learn PID
 					</h1>
 					<p className="type-body max-w-2xl text-ink-muted">
-						Holding an arm in place or keeping the launcher's flywheel at speed
-						takes a few lines of code: read the sensor, compare it with the
-						target, set the motor. You'll write them yourself, one piece at a
-						time, and watch the robot react. First an arm, from an on/off switch
-						to a full PID controller, then the flywheel that launches
-						projectiles.
+						PID controllers are about 20 lines of code. In this short course,
+						you'll learn how to write and tune them.
 					</p>
 				</section>
 
@@ -182,9 +175,9 @@ function Home() {
 						})}
 					</div>
 					<p className="type-body-sm text-ink-muted">
-						Starting downloads what your language needs: about 10 MB for Python,
-						45 MB for C++. Your browser keeps a copy for next time, and you can
-						switch languages any time.
+						Picking a language downloads it first: about 10 MB for Python, 50 MB
+						for C++. Your browser keeps a copy, so that only happens once. You
+						can switch languages on any level.
 					</p>
 				</section>
 

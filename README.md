@@ -84,7 +84,7 @@ Monaco and the language servers must stay out of the server bundle. `clientOnly(
 
 Everything ships with the app, so there's nothing else to host. The largest file is clangd's gzipped wasm at 23.9 MiB.
 
-Download sizes per student: Python is about 10 MB. C++ is about 45 MB compressed: clang 19 MB, clangd 25 MB. Ask students to open the site and pick their language before the workshop, on good wifi.
+Download sizes per student: Python is about 10 MB. C++ is about 50 MB compressed: clang 26 MB, clangd 24 MB. Ask students to open the site and pick their language before the workshop, on good wifi.
 
 ## Open TODOs
 

@@ -13,7 +13,7 @@ export const Route = createRootRoute({
 			{
 				name: "description",
 				content:
-					"Write your own controller in C++ or Python and watch it lift a robot arm.",
+					"Write a PID controller in Python or C++ for a robot arm and a launcher flywheel, and run it in your browser.",
 			},
 		],
 		links: [
